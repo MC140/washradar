@@ -1,0 +1,2 @@
+-- Production seed intentionally contains no businesses, prices, ratings, queue activity or advertising.
+-- Import verified GTA data through the protected ingestion workflow after reviewing provider terms.

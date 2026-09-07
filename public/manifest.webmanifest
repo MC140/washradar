@@ -1,0 +1,21 @@
+{
+  "id": "./",
+  "name": "WashRadar",
+  "short_name": "WashRadar",
+  "description": "Find the best car wash right now by comparing drive, queue, wash time and price.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f7faf8",
+  "theme_color": "#087f65",
+  "categories": ["navigation", "travel", "utilities"],
+  "icons": [
+    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+  ],
+  "shortcuts": [
+    {"name": "Explore washes", "url": "./", "icons": [{"src": "icon-192.png", "sizes": "192x192"}]},
+    {"name": "Saved washes", "url": "./saved", "icons": [{"src": "icon-192.png", "sizes": "192x192"}]}
+  ]
+}

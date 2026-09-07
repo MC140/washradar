@@ -1,0 +1,34 @@
+project_id = "washradar"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 17
+
+[auth]
+enabled = true
+site_url = "http://localhost:4173"
+additional_redirect_urls = ["http://localhost:4173/auth/confirm"]
+enable_anonymous_sign_ins = true
+
+[realtime]
+enabled = true
+
+[functions.queue-actions]
+verify_jwt = true
+[functions.ad-events]
+verify_jwt = true
+[functions.geo-services]
+verify_jwt = true
+[functions.admin]
+verify_jwt = true
+[functions.wash-ingest]
+verify_jwt = true
+[functions.analytics-events]
+verify_jwt = true
