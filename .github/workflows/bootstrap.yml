@@ -1,0 +1,33 @@
+name: Bootstrap WashRadar source
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct exact project archive
+        shell: bash
+        run: |
+          cat .bootstrap/chunk* | base64 -d > /tmp/washradar.tar.xz
+          mkdir -p /tmp/washradar
+          tar -xJf /tmp/washradar.tar.xz -C /tmp/washradar
+
+      - name: Replace starter repository with WashRadar project
+        shell: bash
+        run: |
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -a /tmp/washradar/. .
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Publish WashRadar production project"
+          git push origin HEAD:main
