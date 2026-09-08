@@ -1,0 +1,47 @@
+.quick-directions {
+  align-self: flex-end;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: -2px 0 7px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  color: #075b9e;
+  background: #eaf5ff;
+  border: 1px solid #c9e4fb;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+.quick-directions:hover { background: #dcefff; border-color: #acd6f5; }
+.quick-directions svg { flex: 0 0 auto; }
+
+.queue-update-button {
+  min-height: 43px;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 17px;
+  border-radius: 9px;
+  color: #66440a;
+  background: #fff3c8;
+  border: 1px solid #ecd990;
+  font-size: 13px;
+  font-weight: 800;
+}
+.queue-update-button:hover { background: #ffeaa5; border-color: #dfc76d; }
+
+/* Missing verification should be clear without making the category bar look disabled as a whole. */
+.filter-chips button:disabled {
+  opacity: .72;
+  color: #7a8580;
+  background: #f3f6f4;
+  border: 1px dashed #d8e1dc;
+}
+
+@media (max-width: 640px) {
+  .quick-directions { padding: 5px 7px; font-size: 9px; }
+  .queue-update-button { min-height: 41px; }
+}
