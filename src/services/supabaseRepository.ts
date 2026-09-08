@@ -1,7 +1,7 @@
 import {createClient, type SupabaseClient} from '@supabase/supabase-js';
 import {appConfig} from '../config/env';
 import type {AdCreative, BusinessHours, CarWash, Point, QueueAlert, QueueReportInput, QueueSession, QueueSignal, WashPackage, WashType} from '../domain/models';
-import {clientId, readJson, type AdminSnapshot, type ContributionMetrics, type WashRepository} from './repository';
+import {clientId, readJson, type AdminSnapshot, type CatalogueImportProgress, type CatalogueImportResult, type ContributionMetrics, type WashRepository} from './repository';
 
 type DirectoryRow = {
   id: string;
@@ -26,6 +26,69 @@ type DirectoryRow = {
   hours: BusinessHours[];
   amenities: string[];
 };
+
+type DiscoveryArea = {name: string; lat: number; lng: number; radiusMetres: number};
+
+// 50 overlapping cells cover the practical GTA test footprint while keeping each
+// Places Nearby request small enough to reduce the chance of hitting the 20-result cap.
+// Re-running is safe because wash-ingest de-duplicates by Google Place ID.
+const GTA_DISCOVERY_AREAS: DiscoveryArea[] = [
+  {name: 'Toronto Downtown West', lat: 43.648, lng: -79.430, radiusMetres: 5000},
+  {name: 'Toronto Downtown East', lat: 43.654, lng: -79.355, radiusMetres: 5000},
+  {name: 'Toronto Midtown West', lat: 43.686, lng: -79.430, radiusMetres: 5000},
+  {name: 'Toronto Midtown East', lat: 43.704, lng: -79.365, radiusMetres: 5000},
+  {name: 'Etobicoke South', lat: 43.620, lng: -79.535, radiusMetres: 6000},
+  {name: 'Etobicoke North', lat: 43.722, lng: -79.565, radiusMetres: 6000},
+  {name: 'York', lat: 43.692, lng: -79.480, radiusMetres: 5000},
+  {name: 'North York West', lat: 43.758, lng: -79.505, radiusMetres: 5500},
+  {name: 'North York Central', lat: 43.769, lng: -79.414, radiusMetres: 5500},
+  {name: 'North York East', lat: 43.773, lng: -79.335, radiusMetres: 5500},
+  {name: 'Scarborough West', lat: 43.735, lng: -79.275, radiusMetres: 5500},
+  {name: 'Scarborough Central', lat: 43.776, lng: -79.257, radiusMetres: 5500},
+  {name: 'Scarborough East', lat: 43.784, lng: -79.175, radiusMetres: 5500},
+  {name: 'Scarborough South', lat: 43.718, lng: -79.245, radiusMetres: 5500},
+  {name: 'Toronto Beaches', lat: 43.680, lng: -79.300, radiusMetres: 5000},
+
+  {name: 'Mississauga East', lat: 43.625, lng: -79.610, radiusMetres: 6000},
+  {name: 'Mississauga Central', lat: 43.590, lng: -79.645, radiusMetres: 6000},
+  {name: 'Mississauga West', lat: 43.574, lng: -79.720, radiusMetres: 6000},
+  {name: 'Mississauga North', lat: 43.650, lng: -79.700, radiusMetres: 6000},
+  {name: 'Clarkson Port Credit', lat: 43.536, lng: -79.640, radiusMetres: 6000},
+
+  {name: 'Brampton Southeast', lat: 43.690, lng: -79.730, radiusMetres: 6000},
+  {name: 'Brampton Central', lat: 43.731, lng: -79.762, radiusMetres: 6000},
+  {name: 'Brampton West', lat: 43.724, lng: -79.835, radiusMetres: 6000},
+  {name: 'Brampton North', lat: 43.785, lng: -79.770, radiusMetres: 6500},
+  {name: 'Bolton', lat: 43.879, lng: -79.738, radiusMetres: 7000},
+  {name: 'Caledon South', lat: 43.836, lng: -79.880, radiusMetres: 7500},
+
+  {name: 'Oakville East', lat: 43.457, lng: -79.660, radiusMetres: 6000},
+  {name: 'Oakville Central', lat: 43.467, lng: -79.700, radiusMetres: 6000},
+  {name: 'Oakville North', lat: 43.500, lng: -79.735, radiusMetres: 6500},
+  {name: 'Burlington East', lat: 43.365, lng: -79.760, radiusMetres: 6500},
+  {name: 'Burlington Central', lat: 43.345, lng: -79.800, radiusMetres: 6500},
+  {name: 'Burlington North', lat: 43.390, lng: -79.825, radiusMetres: 7000},
+  {name: 'Milton East', lat: 43.515, lng: -79.835, radiusMetres: 7000},
+  {name: 'Milton West', lat: 43.525, lng: -79.900, radiusMetres: 7000},
+
+  {name: 'Vaughan West', lat: 43.795, lng: -79.600, radiusMetres: 6000},
+  {name: 'Vaughan Central', lat: 43.827, lng: -79.535, radiusMetres: 6000},
+  {name: 'Vaughan East', lat: 43.810, lng: -79.470, radiusMetres: 6000},
+  {name: 'Richmond Hill South', lat: 43.845, lng: -79.430, radiusMetres: 6000},
+  {name: 'Richmond Hill North', lat: 43.900, lng: -79.440, radiusMetres: 6000},
+  {name: 'Markham West', lat: 43.840, lng: -79.355, radiusMetres: 6000},
+  {name: 'Markham Central', lat: 43.856, lng: -79.265, radiusMetres: 6000},
+  {name: 'Markham East', lat: 43.885, lng: -79.190, radiusMetres: 6500},
+  {name: 'Aurora', lat: 44.000, lng: -79.468, radiusMetres: 7000},
+  {name: 'Newmarket', lat: 44.058, lng: -79.461, radiusMetres: 7000},
+
+  {name: 'Pickering', lat: 43.838, lng: -79.087, radiusMetres: 6500},
+  {name: 'Ajax', lat: 43.850, lng: -79.020, radiusMetres: 6500},
+  {name: 'Whitby', lat: 43.897, lng: -78.943, radiusMetres: 6500},
+  {name: 'Oshawa West', lat: 43.900, lng: -78.865, radiusMetres: 6500},
+  {name: 'Oshawa East', lat: 43.915, lng: -78.805, radiusMetres: 6500},
+  {name: 'Clarington West', lat: 43.910, lng: -78.700, radiusMetres: 7500},
+];
 
 function mapWash(row: DirectoryRow): CarWash {
   return {
@@ -274,5 +337,34 @@ export class SupabaseRepository implements WashRepository {
   async moderateReport(id: string, disabled: boolean) {
     const {data, error} = await this.client.functions.invoke('admin', {body: {action: 'moderate-report', reportId: id, disabled}});
     if (error || data?.error) throw new Error(data?.error || 'The report could not be updated.');
+  }
+
+  async bootstrapGtaCatalogue(onProgress?: (progress: CatalogueImportProgress) => void): Promise<CatalogueImportResult> {
+    let discovered = 0;
+    let imported = 0;
+    let updated = 0;
+
+    for (let index = 0; index < GTA_DISCOVERY_AREAS.length; index++) {
+      const area = GTA_DISCOVERY_AREAS[index];
+      const {data, error} = await this.client.functions.invoke('wash-ingest', {
+        body: {lat: area.lat, lng: area.lng, radiusMetres: area.radiusMetres},
+      });
+      if (error || data?.error) {
+        throw new Error(`GTA import stopped at ${area.name}: ${data?.error || error?.message || 'Places discovery failed.'}`);
+      }
+      discovered += Number(data?.discovered ?? 0);
+      imported += Number(data?.imported ?? 0);
+      updated += Number(data?.updated ?? 0);
+      onProgress?.({
+        area: area.name,
+        completed: index + 1,
+        total: GTA_DISCOVERY_AREAS.length,
+        discovered,
+        imported,
+        updated,
+      });
+    }
+
+    return {discovered, imported, updated, areasCompleted: GTA_DISCOVERY_AREAS.length};
   }
 }
