@@ -9,6 +9,8 @@ const client = createClient(appConfig.supabaseUrl, appConfig.supabasePublishable
   auth: {persistSession: true, autoRefreshToken: true, detectSessionInUrl: true},
 });
 
+const TYPE_ENRICHMENT_VERSION = '2';
+
 async function ensureContributor() {
   const {data: {session}} = await client.auth.getSession();
   if (!session) {
@@ -58,9 +60,22 @@ export type WashTypeEnrichmentProgress = {
   nextOffset: number | null;
 };
 
-export async function enrichWashTypes(onProgress?: (progress: WashTypeEnrichmentProgress) => void) {
+function prepareEnrichmentOffset() {
+  // Version 1 detected evidence but could not persist it because the service role
+  // was missing lookup-table read permission. Reset exactly once after that fix so
+  // the first 250 places are repaired automatically; later runs remain resumable.
+  const version = localStorage.getItem('wr-type-enrich-version');
+  if (version !== TYPE_ENRICHMENT_VERSION) {
+    localStorage.removeItem('wr-type-enrich-offset');
+    localStorage.setItem('wr-type-enrich-version', TYPE_ENRICHMENT_VERSION);
+    return 0;
+  }
   const stored = Number(localStorage.getItem('wr-type-enrich-offset') ?? '0');
-  let offset = Number.isFinite(stored) && stored >= 0 ? stored : 0;
+  return Number.isFinite(stored) && stored >= 0 ? stored : 0;
+}
+
+export async function enrichWashTypes(onProgress?: (progress: WashTypeEnrichmentProgress) => void) {
+  let offset = prepareEnrichmentOffset();
   let totalProcessed = 0;
   let totalClassified = 0;
   let totalWebsiteMatches = 0;
