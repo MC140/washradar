@@ -8,6 +8,7 @@ import {WASH_TYPE_CONFIG} from '../domain/config';
 import {WashCard} from '../components/WashCard';
 import {Modal} from '../components/Modal';
 import {NearbyOffer} from '../components/NearbyOffer';
+import {ReportModal} from '../components/ReportModal';
 import {repository} from '../services';
 
 const MapView = lazy(() => import('../components/MapView').then((module) => ({default: module.MapView})));
@@ -29,6 +30,7 @@ export function ExplorePage() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [searchMessage, setSearchMessage] = useState('');
   const [selectedMapWash, setSelectedMapWash] = useState<RankedWash>();
+  const [reportingWash, setReportingWash] = useState<RankedWash>();
   const [ad, setAd] = useState<AdCreative | null>(null);
   const [locationPrompt, setLocationPrompt] = useState(() => localStorage.getItem('wr-location-intro') !== 'seen');
 
@@ -107,7 +109,7 @@ export function ExplorePage() {
       {loading ? <LoadingCards /> : best ? (
         <>
           <div className="recommend-layout">
-            <WashCard wash={best} best saved={favourites.includes(best.id)} onSave={() => void toggleFavourite(best.id)} />
+            <WashCard wash={best} best saved={favourites.includes(best.id)} onSave={() => void toggleFavourite(best.id)} onReport={() => setReportingWash(best)} />
             <aside className="recommend-copy">
               <span className="radar-orbit"><LocateFixed size={36} /></span>
               <p className="eyebrow">THE DECISION, MADE CLEAR</p>
@@ -140,13 +142,14 @@ export function ExplorePage() {
       </div>}
 
       {locationReady && !loading && filtered.length > 0 && (view === 'list'
-        ? <div className="cards-grid">{filtered.map((wash) => <WashCard key={wash.id} wash={wash} saved={favourites.includes(wash.id)} onSave={() => void toggleFavourite(wash.id)} />)}</div>
+        ? <div className="cards-grid">{filtered.map((wash) => <WashCard key={wash.id} wash={wash} saved={favourites.includes(wash.id)} onSave={() => void toggleFavourite(wash.id)} onReport={() => setReportingWash(wash)} />)}</div>
         : <div className="map-section"><Suspense fallback={<div className="map-skeleton" />}>
             <MapView washes={filtered} origin={origin} selectedId={selectedMapWash?.id} onSelect={setSelectedMapWash} />
-          </Suspense>{selectedMapWash && <div className="map-preview"><button aria-label="Close map preview" onClick={() => setSelectedMapWash(undefined)}>×</button><WashCard compact wash={selectedMapWash} saved={favourites.includes(selectedMapWash.id)} onSave={() => void toggleFavourite(selectedMapWash.id)} /></div>}</div>
+          </Suspense>{selectedMapWash && <div className="map-preview"><button aria-label="Close map preview" onClick={() => setSelectedMapWash(undefined)}>×</button><WashCard compact wash={selectedMapWash} saved={favourites.includes(selectedMapWash.id)} onSave={() => void toggleFavourite(selectedMapWash.id)} onReport={() => setReportingWash(selectedMapWash)} /></div>}</div>
       )}
 
       <FilterModal open={filterOpen} filters={filters} onChange={setFilters} onClose={() => setFilterOpen(false)} />
+      <ReportModal open={Boolean(reportingWash)} initialWash={reportingWash} onClose={() => setReportingWash(undefined)} />
       <Modal open={locationPrompt} onClose={() => {localStorage.setItem('wr-location-intro', 'seen'); setLocationPrompt(false);}} title="Find the best wash near you" description="Share your location once to compare nearby drive and queue times. WashRadar does not keep a public GPS trail.">
         <div className="location-consent-actions"><button className="primary-button" onClick={async () => {localStorage.setItem('wr-location-intro', 'seen'); setLocationPrompt(false); await locate();}}>Use my location</button><button className="secondary-button" onClick={() => {localStorage.setItem('wr-location-intro', 'seen'); setLocationPrompt(false);}}>Search manually</button></div>
       </Modal>
