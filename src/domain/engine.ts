@@ -86,6 +86,8 @@ export function estimateQueue(wash: CarWash, signals: QueueSignal[], now = new D
     totalWeight += weight;
   }
 
+  // A numeric 0 remains an internal fallback for compatibility. UI and ranking must
+  // call hasQueueEvidence() before presenting it as a real zero-minute wait.
   const waitMinutes = totalWeight > 0 ? Math.max(0, Math.round(weightedWait / totalWeight)) : 0;
   const strongAgreementInputs = weightedInputs.filter((item) => item.signal.verification !== 'remote');
   const agreementInputs = strongAgreementInputs.length ? strongAgreementInputs : weightedInputs;
@@ -137,6 +139,10 @@ export function estimateQueue(wash: CarWash, signals: QueueSignal[], now = new D
   };
 }
 
+export function hasQueueEvidence(wash: Pick<CarWash, 'historicalSampleCount'>, estimate: Pick<QueueEstimate, 'recentSignalCount'>): boolean {
+  return estimate.recentSignalCount > 0 || wash.historicalSampleCount > 0;
+}
+
 export function totalTime(driveMinutes: number, queueMinutes: number, washMinutes: number): number {
   return Math.max(0, driveMinutes) + Math.max(0, queueMinutes) + Math.max(0, washMinutes);
 }
@@ -154,7 +160,9 @@ export function rankWash(
 ): RankedWash {
   const rawDistance = distanceKm(origin, wash.position);
   const driveMinutes = options.routeMinutes ?? Math.max(2, Math.round(rawDistance / 0.58 + 2));
-  const tripTotal = totalTime(driveMinutes, estimate.waitMinutes, wash.estimatedWashMinutes);
+  const queueKnown = hasQueueEvidence(wash, estimate);
+  const queueForRanking = queueKnown ? estimate.waitMinutes : 0;
+  const tripTotal = totalTime(driveMinutes, queueForRanking, wash.estimatedWashMinutes);
   const price = startingPrice(wash);
   const preferred = options.preferredTypes?.some((type) => wash.types.includes(type)) ?? false;
   const weatherAdjustment =
@@ -163,16 +171,23 @@ export function rankWash(
       : options.weather?.suitability === 'poor'
         ? RECOMMENDATION_WEIGHTS.poorWeatherPenalty
         : 0;
+  const unavailable = estimate.operatingStatus === 'closed' || estimate.operatingStatus === 'unavailable';
+  const trustPenalty =
+    (estimate.operatingStatus === 'unknown' ? RECOMMENDATION_WEIGHTS.unknownHoursPenalty : 0) +
+    (!queueKnown ? RECOMMENDATION_WEIGHTS.unknownQueuePenalty : 0) +
+    (!Number.isFinite(price) ? RECOMMENDATION_WEIGHTS.unknownPricePenalty : 0) +
+    (!wash.types.length ? RECOMMENDATION_WEIGHTS.unknownWashTypePenalty : 0);
   const score =
-    estimate.operatingStatus === 'open'
-      ? tripTotal * RECOMMENDATION_WEIGHTS.totalMinutes +
+    unavailable
+      ? Number.POSITIVE_INFINITY
+      : tripTotal * RECOMMENDATION_WEIGHTS.totalMinutes +
         rawDistance * RECOMMENDATION_WEIGHTS.distanceKm +
         (Number.isFinite(price) ? price : 20) * RECOMMENDATION_WEIGHTS.priceCad +
         (wash.rating ?? 3.8) * RECOMMENDATION_WEIGHTS.rating +
         (100 - estimate.confidenceScore) * RECOMMENDATION_WEIGHTS.uncertainty +
         (preferred ? RECOMMENDATION_WEIGHTS.preferredTypeBonus : 0) +
-        weatherAdjustment
-      : Number.POSITIVE_INFINITY;
+        weatherAdjustment +
+        trustPenalty;
 
   return {
     ...wash,
@@ -180,6 +195,7 @@ export function rankWash(
     distanceKm: Math.round(rawDistance * 10) / 10,
     driveMinutes,
     driveTimeSource: options.routeMinutes ? 'ROUTE' : 'ESTIMATED',
+    // totalMinutes is only a complete door-to-done total when hasQueueEvidence() is true.
     totalMinutes: tripTotal,
     score,
     reasons: [],
@@ -197,23 +213,27 @@ export function rankWashes(
     .map((wash) => rankWash(wash, estimateQueue(wash, signals, now), origin, {...options, routeMinutes: options.routeMinutes?.[wash.id]}))
     .sort((a, b) => a.score - b.score);
 
-  const open = ranked.filter((wash) => wash.estimate.operatingStatus === 'open');
-  const best = open[0];
+  const eligible = ranked.filter((wash) => wash.estimate.operatingStatus !== 'closed' && wash.estimate.operatingStatus !== 'unavailable');
+  const explicitlyOpen = eligible.filter((wash) => wash.estimate.operatingStatus === 'open');
+  const pool = explicitlyOpen.length ? explicitlyOpen : eligible;
+  const best = pool[0];
   if (!best) return ranked;
-  const nearest = [...open].sort((a, b) => a.distanceKm - b.distanceKm)[0];
-  const fastest = [...open].sort((a, b) => a.totalMinutes - b.totalMinutes)[0];
-  const cheapest = [...open].sort((a, b) => startingPrice(a) - startingPrice(b))[0];
-  const runnerUp = open[1];
+  const nearest = [...pool].sort((a, b) => a.distanceKm - b.distanceKm)[0];
+  const fastest = pool.filter((wash) => hasQueueEvidence(wash, wash.estimate)).sort((a, b) => a.totalMinutes - b.totalMinutes)[0];
+  const cheapest = pool.filter((wash) => Number.isFinite(startingPrice(wash))).sort((a, b) => startingPrice(a) - startingPrice(b))[0];
+  const runnerUp = pool[1];
 
   for (const wash of ranked) {
     const reasons: string[] = [];
-    if (wash.id === fastest?.id) reasons.push('Fastest option nearby');
+    if (wash.id === fastest?.id) reasons.push('Fastest option with queue data');
     if (wash.estimate.waitMinutes === 0 && wash.estimate.recentSignalCount > 0) reasons.push('No reported queue');
     if (wash.rating !== null && wash.rating >= 4.5) reasons.push('Highly rated');
-    if (wash.id === cheapest?.id) reasons.push('Lowest starting price');
-    if (wash.id === best.id && nearest && nearest.id !== wash.id && wash.totalMinutes < nearest.totalMinutes) {
+    if (wash.id === cheapest?.id) reasons.push('Lowest known starting price');
+    if (wash.id === best.id && !hasQueueEvidence(wash, wash.estimate)) reasons.push('Best available estimate · queue unknown');
+    if (wash.id === best.id && wash.estimate.operatingStatus === 'unknown') reasons.push('Hours not yet verified');
+    if (wash.id === best.id && hasQueueEvidence(wash, wash.estimate) && nearest && nearest.id !== wash.id && wash.totalMinutes < nearest.totalMinutes) {
       reasons.push(`${nearest.totalMinutes - wash.totalMinutes} min faster than the closest option`);
-    } else if (wash.id === best.id && runnerUp && runnerUp.totalMinutes > wash.totalMinutes) {
+    } else if (wash.id === best.id && hasQueueEvidence(wash, wash.estimate) && runnerUp && hasQueueEvidence(runnerUp, runnerUp.estimate) && runnerUp.totalMinutes > wash.totalMinutes) {
       reasons.push(`Saves about ${runnerUp.totalMinutes - wash.totalMinutes} min`);
     }
     wash.reasons = reasons.slice(0, 2);
