@@ -25,27 +25,33 @@ export function ReportModal({open, initialWash, onClose}: {open: boolean; initia
   const {washes, submitReport, currentPosition} = useWashRadar();
   const [washId, setWashId] = useState(initialWash?.id ?? '');
   const [busy, setBusy] = useState(false);
-  const [complete, setComplete] = useState('');
+  const [message, setMessage] = useState('');
+  const [failed, setFailed] = useState(false);
   const wash = useMemo(() => washes.find((item) => item.id === washId), [washId, washes]);
+  const initialWashId = initialWash?.id;
 
   useEffect(() => {
-    if (!open || !initialWash) return;
-    setWashId(initialWash.id);
-    setComplete('');
-    analytics.track('queue_report_started', {washId: initialWash.id});
-  }, [open, initialWash?.id]);
+    if (!open || !initialWashId) return;
+    setWashId(initialWashId);
+    setMessage('');
+    setFailed(false);
+    analytics.track('queue_report_started', {washId: initialWashId});
+  }, [open, initialWashId]);
 
   const send = async (kind: QueueSignal['kind'], queueBucket?: QueueBucket) => {
     if (!wash) return;
     setBusy(true);
+    setMessage('');
+    setFailed(false);
     try {
       const verification = await submitReport({washId: wash.id, kind, queueBucket});
-      setComplete(verification === 'nearby'
+      setMessage(verification === 'nearby'
         ? 'Thanks — your nearby report is helping drivers right now.'
         : 'Thanks — saved as a remote report with lower weight.');
-      window.setTimeout(() => { setComplete(''); setWashId(''); onClose(); }, 1500);
+      window.setTimeout(() => { setMessage(''); setWashId(''); onClose(); }, 1500);
     } catch (error) {
-      setComplete(error instanceof Error ? error.message : 'The report could not be sent.');
+      setFailed(true);
+      setMessage(error instanceof Error ? error.message : 'The report could not be sent.');
     } finally {
       setBusy(false);
     }
@@ -55,19 +61,19 @@ export function ReportModal({open, initialWash, onClose}: {open: boolean; initia
     <Modal
       open={open}
       onClose={onClose}
-      title={complete ? 'Report received' : wash ? 'What do you see?' : 'Choose a nearby wash'}
-      description={complete || (wash ? 'One tap is enough. Nearby reports become live signals; remote reports are clearly weighted lower.' : 'Pick the wash you are looking at.')}
+      title={failed ? 'Report could not be sent' : message ? 'Report received' : wash ? 'What do you see?' : 'Choose a nearby wash'}
+      description={message || (wash ? 'One tap is enough. Nearby reports become live signals; remote reports are clearly weighted lower.' : 'Pick the wash you are looking at.')}
     >
-      {!complete && !wash && (
+      {!message && !wash && (
         <div className="wash-picker">
           {washes.slice(0, 12).map((item) => (
-            <button key={item.id} onClick={() => { setWashId(item.id); analytics.track('queue_report_started', {washId: item.id}); }}>
+            <button key={item.id} onClick={() => { setWashId(item.id); setFailed(false); analytics.track('queue_report_started', {washId: item.id}); }}>
               <span><strong>{item.name}</strong><small>{item.address}</small></span><b>{item.distanceKm.toFixed(1)} km</b>
             </button>
           ))}
         </div>
       )}
-      {!complete && wash && (
+      {!message && wash && (
         <>
           <div className="proximity-note">
             {currentPosition ? <ShieldCheck size={18} /> : <MapPin size={18} />}
@@ -82,6 +88,7 @@ export function ReportModal({open, initialWash, onClose}: {open: boolean; initia
           </div>
         </>
       )}
+      {failed && wash && <button className="secondary-button full" disabled={busy} onClick={() => { setMessage(''); setFailed(false); }}>Try again</button>}
     </Modal>
   );
 }
