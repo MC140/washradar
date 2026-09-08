@@ -6,6 +6,7 @@ import {useWashRadar} from '../state/WashRadarContext';
 import {Modal} from './Modal';
 import {analytics} from '../services/analytics';
 import {submitWashTypeContribution} from '../services/washTypeTrust';
+import '../washTypeTrust.css';
 
 const queueOptions: {label: string; bucket: QueueBucket}[] = [
   {label: 'NO QUEUE', bucket: 'none'},
