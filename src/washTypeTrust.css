@@ -1,0 +1,8 @@
+.wash-type-help { margin: -4px 0 10px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.wash-type-report-options { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+.wash-type-report-options button { padding: 9px 12px; border-radius: 999px; border: 1px solid #d8e3de; background: #f4f8f6; color: #53625b; font-size: 11px; font-weight: 750; }
+.wash-type-report-options button.selected { color: white; border-color: var(--green); background: var(--green); box-shadow: 0 4px 12px rgba(8, 127, 101, .16); }
+.wash-type-report-options button:hover:not(:disabled) { border-color: #9bc9b8; }
+.type-trust-note { display: inline-flex; align-items: center; gap: 6px; margin-top: 5px; color: var(--muted); font-size: 10px; }
+.admin-type-progress { margin-top: 14px; padding: 12px 14px; border-radius: 10px; background: #f4f8f6; border: 1px solid #dfe8e3; }
+.admin-type-progress p { margin: 3px 0; font-size: 12px; }
