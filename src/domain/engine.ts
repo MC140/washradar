@@ -15,17 +15,40 @@ export function queueBucketToWait(bucket: QueueBucket, minutesPerCar: number): n
 
 export function freshnessWeight(ageMinutes: number): number {
   if (ageMinutes < 0 || ageMinutes > QUEUE_CONFIG.signalExpiryMinutes) return 0;
-  if (ageMinutes <= 5) return 1 - ageMinutes * 0.025;
-  if (ageMinutes <= 15) return 0.875 * Math.exp(-(ageMinutes - 5) / 15);
-  if (ageMinutes <= 30) return 0.45 * Math.exp(-(ageMinutes - 15) / 20);
-  return 0.21 * Math.exp(-(ageMinutes - 30) / 18);
+  if (ageMinutes <= 5) return 1;
+  if (ageMinutes <= 15) return 0.75;
+  if (ageMinutes <= 30) return 0.4;
+  return 0.15;
+}
+
+function reputationFactor(score = 50): number {
+  return Math.min(1.25, Math.max(0.65, score / 50));
 }
 
 function signalWeight(signal: QueueSignal, now: Date): number {
   const age = (now.getTime() - new Date(signal.createdAt).getTime()) / 60_000;
-  const proximity = signal.verification === 'session' ? 1.55 : signal.verification === 'nearby' ? 1.2 : 0.35;
-  const reputation = Math.min(1.3, Math.max(0.55, (signal.reputation ?? 50) / 50));
-  return freshnessWeight(age) * proximity * reputation;
+  const proximity = signal.verification === 'session' ? 1.45 : signal.verification === 'nearby' ? 1 : 0.12;
+  return freshnessWeight(age) * proximity * reputationFactor(signal.reputation ?? 50);
+}
+
+function agreementFactor(wait: number, consensus: number): number {
+  const delta = Math.abs(wait - consensus);
+  if (delta <= 4) return 1;
+  if (delta <= 10) return 0.75;
+  if (delta <= 20) return 0.4;
+  return 0.15;
+}
+
+function weightedMedian(items: {wait: number; weight: number}[]): number {
+  if (!items.length) return 0;
+  const sorted = [...items].sort((a, b) => a.wait - b.wait);
+  const total = sorted.reduce((sum, item) => sum + item.weight, 0);
+  let running = 0;
+  for (const item of sorted) {
+    running += item.weight;
+    if (running >= total / 2) return item.wait;
+  }
+  return sorted[sorted.length - 1].wait;
 }
 
 export function estimateQueue(wash: CarWash, signals: QueueSignal[], now = new Date()): QueueEstimate {
@@ -38,36 +61,53 @@ export function estimateQueue(wash: CarWash, signals: QueueSignal[], now = new D
   const active = [...uniqueActors.values()].filter((signal) => signalWeight(signal, now) > 0);
   const closureReports = active.filter((signal) => signal.kind === 'closed' || signal.kind === 'broken');
   const nearbyClosures = closureReports.filter((signal) => signal.verification !== 'remote');
-  const normalReports = active.filter((signal) => signal.kind === 'normal');
+  const normalReports = active.filter((signal) => signal.kind === 'normal' && signal.verification !== 'remote');
   let operatingStatus = wash.status;
   if (nearbyClosures.length >= 2 && nearbyClosures.length > normalReports.length) operatingStatus = 'unavailable';
 
   const queueSignals = active.filter((signal) => signal.waitMinutes !== null && signal.waitMinutes >= 0);
-  const historicalWeight = Math.min(2.2, 0.55 + wash.historicalSampleCount / 25);
+  const weightedInputs = queueSignals.map((signal) => ({
+    signal,
+    wait: Math.min(signal.waitMinutes ?? 0, QUEUE_CONFIG.maximumObservedWaitMinutes),
+    age: (now.getTime() - new Date(signal.createdAt).getTime()) / 60_000,
+    baseWeight: signalWeight(signal, now),
+  })).filter((item) => item.baseWeight > 0);
+
+  const consensus = weightedMedian(weightedInputs.map((item) => ({wait: item.wait, weight: item.baseWeight})));
+  const historicalWeight = wash.historicalSampleCount > 0
+    ? Math.min(1.5, 0.25 + wash.historicalSampleCount / 30)
+    : 0;
   let weightedWait = wash.historicalWaitMinutes * historicalWeight;
   let totalWeight = historicalWeight;
-  let liveEvidence = 0;
+  let disagreementSum = 0;
+  let disagreementWeight = 0;
 
-  for (const signal of queueSignals) {
-    const weight = signalWeight(signal, now);
-    weightedWait += Math.min(signal.waitMinutes ?? 0, QUEUE_CONFIG.maximumObservedWaitMinutes) * weight;
+  for (const item of weightedInputs) {
+    const weight = item.baseWeight * agreementFactor(item.wait, consensus);
+    weightedWait += item.wait * weight;
     totalWeight += weight;
-    liveEvidence += weight;
+    disagreementSum += Math.abs(item.wait - consensus) * item.baseWeight;
+    disagreementWeight += item.baseWeight;
   }
 
-  const waitMinutes = Math.max(0, Math.round(weightedWait / Math.max(totalWeight, 0.01)));
-  const disagreement = queueSignals.length
-    ? queueSignals.reduce((total, signal) => total + Math.abs((signal.waitMinutes ?? 0) - waitMinutes), 0) / queueSignals.length
-    : 0;
-  const newest = queueSignals.reduce<Date | null>((latest, signal) => {
-    const date = new Date(signal.createdAt);
+  const waitMinutes = totalWeight > 0 ? Math.max(0, Math.round(weightedWait / totalWeight)) : 0;
+  const disagreement = disagreementWeight > 0 ? disagreementSum / disagreementWeight : 0;
+  const newest = weightedInputs.reduce<Date | null>((latest, item) => {
+    const date = new Date(item.signal.createdAt);
     return !latest || date > latest ? date : latest;
   }, null);
   const newestAge = newest ? (now.getTime() - newest.getTime()) / 60_000 : Number.POSITIVE_INFINITY;
-  const historyStrength = Math.min(22, wash.historicalSampleCount * 1.1);
-  const confidenceScore = Math.round(Math.min(96, Math.max(8, 14 + historyStrength + liveEvidence * 18 - Math.min(30, disagreement * 1.5))));
+  const freshStrong = weightedInputs.filter((item) => item.age <= QUEUE_CONFIG.liveMaxAgeMinutes && item.signal.verification !== 'remote');
+  const freshSessions = freshStrong.filter((item) => item.signal.verification === 'session');
+  const freshRemote = weightedInputs.filter((item) => item.age <= QUEUE_CONFIG.liveMaxAgeMinutes && item.signal.verification === 'remote');
+  const agreementScore = weightedInputs.length ? Math.max(0, 1 - disagreement / 20) : 0;
+  const historyStrength = Math.min(20, wash.historicalSampleCount * 0.8);
+  const evidenceStrength = Math.min(52, freshStrong.length * 18 + freshSessions.length * 10 + Math.min(2, freshRemote.length) * 2);
+  let confidenceScore = Math.round(Math.min(96, Math.max(8, 12 + historyStrength + evidenceStrength + agreementScore * 12)));
+  if (!freshStrong.length && freshRemote.length && wash.historicalSampleCount < 8) confidenceScore = Math.min(confidenceScore, 32);
+
   const dataState =
-    newestAge <= QUEUE_CONFIG.liveMaxAgeMinutes && confidenceScore >= 50
+    (freshSessions.length >= 1 && confidenceScore >= 65) || (freshStrong.length >= 2 && confidenceScore >= 60)
       ? 'LIVE'
       : newestAge <= QUEUE_CONFIG.recentMaxAgeMinutes
         ? 'RECENT REPORT'
@@ -90,8 +130,8 @@ export function estimateQueue(wash: CarWash, signals: QueueSignal[], now = new D
     dataState,
     lastUpdatedAt: newest?.toISOString() ?? null,
     operatingStatus,
-    estimatedCars: queueSignals.length ? Math.round(waitMinutes / Math.max(wash.minutesPerCar, 0.5)) : null,
-    recentSignalCount: queueSignals.length,
+    estimatedCars: weightedInputs.length ? Math.round(waitMinutes / Math.max(wash.minutesPerCar, 0.5)) : null,
+    recentSignalCount: weightedInputs.length,
   };
 }
 
@@ -166,13 +206,13 @@ export function rankWashes(
   for (const wash of ranked) {
     const reasons: string[] = [];
     if (wash.id === fastest?.id) reasons.push('Fastest option nearby');
-    if (wash.estimate.waitMinutes === 0) reasons.push('No reported queue');
+    if (wash.estimate.waitMinutes === 0 && wash.estimate.recentSignalCount > 0) reasons.push('No reported queue');
     if (wash.rating !== null && wash.rating >= 4.5) reasons.push('Highly rated');
     if (wash.id === cheapest?.id) reasons.push('Lowest starting price');
     if (wash.id === best.id && nearest && nearest.id !== wash.id && wash.totalMinutes < nearest.totalMinutes) {
-      reasons.push('${nearest.totalMinutes - wash.totalMinutes} min faster than the closest option');
+      reasons.push(`${nearest.totalMinutes - wash.totalMinutes} min faster than the closest option`);
     } else if (wash.id === best.id && runnerUp && runnerUp.totalMinutes > wash.totalMinutes) {
-      reasons.push('Saves about ${runnerUp.totalMinutes - wash.totalMinutes} min');
+      reasons.push(`Saves about ${runnerUp.totalMinutes - wash.totalMinutes} min`);
     }
     wash.reasons = reasons.slice(0, 2);
   }
