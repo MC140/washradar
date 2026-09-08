@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {estimateQueue, freshnessWeight, queueBucketToWait, rankWashes, totalTime} from '../src/domain/engine.ts';
+import {estimateQueue, freshnessWeight, hasQueueEvidence, queueBucketToWait, rankWashes, totalTime} from '../src/domain/engine.ts';
 import {DEMO_ORIGIN, DEMO_WASHES} from '../src/data/demo.ts';
 
 const signal = (washId, actorHash, waitMinutes, age, extras = {}) => ({
@@ -68,4 +68,25 @@ test('low-confidence options receive an uncertainty penalty', () => {
   const uncertain = {...confident, id: DEMO_WASHES[1].id, historicalSampleCount: 0};
   const ranked = rankWashes([uncertain, confident], [], DEMO_ORIGIN);
   assert.equal(ranked[0].id, confident.id);
+});
+test('missing queue evidence is not treated as a real zero-minute queue', () => {
+  const wash = {...DEMO_WASHES[0], historicalWaitMinutes: 0, historicalSampleCount: 0};
+  const estimate = estimateQueue(wash, []);
+  assert.equal(estimate.waitMinutes, 0);
+  assert.equal(hasQueueEvidence(wash, estimate), false);
+  const reported = estimateQueue(wash, [signal(wash.id, 'a', 0, 2)]);
+  assert.equal(hasQueueEvidence(wash, reported), true);
+});
+test('unknown business hours remain rankable but carry a trust penalty', () => {
+  const known = {...DEMO_WASHES[0], id: 'known', position: {...DEMO_ORIGIN}, status: 'open', historicalSampleCount: 10};
+  const unknown = {...known, id: 'unknown', status: 'unknown'};
+  const ranked = rankWashes([unknown, known], [], DEMO_ORIGIN);
+  assert.equal(ranked[0].id, 'known');
+  assert.ok(Number.isFinite(ranked.find((item) => item.id === 'unknown').score));
+});
+test('closed and unavailable washes stay ineligible for recommendation', () => {
+  const closed = {...DEMO_WASHES[0], status: 'closed'};
+  const unavailable = {...DEMO_WASHES[1], status: 'unavailable'};
+  const ranked = rankWashes([closed, unavailable], [], DEMO_ORIGIN);
+  assert.equal(ranked.every((item) => item.score === Infinity), true);
 });
