@@ -136,6 +136,21 @@ export class SupabaseRepository implements WashRepository {
     }
   }
 
+  private async functionErrorMessage(error: unknown, fallback: string) {
+    const context = (error as {context?: unknown} | null)?.context;
+    if (typeof Response !== 'undefined' && context instanceof Response) {
+      try {
+        const payload = await context.clone().json() as {error?: unknown; message?: unknown};
+        if (typeof payload.error === 'string' && payload.error.trim()) return payload.error;
+        if (typeof payload.message === 'string' && payload.message.trim()) return payload.message;
+      } catch {
+        // Keep the friendly fallback below if the response body is not JSON.
+      }
+    }
+    const message = error instanceof Error ? error.message : '';
+    return message && !message.toLowerCase().includes('edge function returned a non-2xx') ? message : fallback;
+  }
+
   async loadWashes(origin: Point, radiusKm = 50) {
     const {data, error} = await this.client.rpc('nearby_washes_json', {p_lat: origin.lat, p_lng: origin.lng, p_radius_km: radiusKm});
     if (error) throw new Error('Nearby washes could not be loaded.');
@@ -175,7 +190,7 @@ export class SupabaseRepository implements WashRepository {
   private async queueAction<T>(body: Record<string, unknown>): Promise<T> {
     await this.ensureContributor();
     const {data, error} = await this.client.functions.invoke('queue-actions', {body: {...body, clientId: clientId()}});
-    if (error) throw new Error(error.message || 'That queue action could not be completed.');
+    if (error) throw new Error(await this.functionErrorMessage(error, 'That queue action could not be completed.'));
     if (data?.error) throw new Error(data.error);
     return data as T;
   }

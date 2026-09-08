@@ -1,8 +1,8 @@
 import {lazy, Suspense, useEffect, useMemo, useState} from 'react';
-import {ChevronRight, CloudSun, List, LocateFixed, Map as MapIcon, Navigation, Search, SlidersHorizontal} from 'lucide-react';
+import {ChevronRight, List, LocateFixed, Map as MapIcon, Navigation, Search, ShieldCheck, SlidersHorizontal} from 'lucide-react';
 import {Link} from 'react-router-dom';
 import {useWashRadar} from '../state/WashRadarContext';
-import {startingPrice} from '../domain/engine';
+import {hasQueueEvidence, startingPrice} from '../domain/engine';
 import type {AdCreative, RankedWash, SortMode, WashFilters, WashType} from '../domain/models';
 import {WASH_TYPE_CONFIG} from '../domain/config';
 import {WashCard} from '../components/WashCard';
@@ -12,7 +12,7 @@ import {ReportModal} from '../components/ReportModal';
 import {repository} from '../services';
 
 const MapView = lazy(() => import('../components/MapView').then((module) => ({default: module.MapView})));
-const sortOptions: SortMode[] = ['Recommended', 'Fastest Total Time', 'Shortest Queue', 'Nearest', 'Lowest Price'];
+const baseSortOptions: SortMode[] = ['Recommended', 'Fastest Total Time', 'Shortest Queue', 'Nearest', 'Lowest Price'];
 const chips: {type?: WashType; label: string}[] = [
   {label: 'All washes'},
   {type: 'touchless', label: 'Touchless'},
@@ -34,30 +34,54 @@ export function ExplorePage() {
   const [ad, setAd] = useState<AdCreative | null>(null);
   const [locationPrompt, setLocationPrompt] = useState(() => localStorage.getItem('wr-location-intro') !== 'seen');
 
+  const typeDataAvailable = washes.some((wash) => wash.types.length > 0);
+  const priceDataAvailable = washes.some((wash) => Number.isFinite(startingPrice(wash)));
+  const hoursDataAvailable = washes.some((wash) => wash.estimate.operatingStatus !== 'unknown');
+  const queueDataAvailable = washes.some((wash) => hasQueueEvidence(wash, wash.estimate));
+  const sortOptions = baseSortOptions.filter((option) =>
+    (option !== 'Lowest Price' || priceDataAvailable) &&
+    (!['Fastest Total Time', 'Shortest Queue'].includes(option) || queueDataAvailable),
+  );
+
+  useEffect(() => {
+    if (!sortOptions.includes(sort)) setSort('Recommended');
+  }, [sort, setSort, priceDataAvailable, queueDataAvailable]);
+
   const filtered = useMemo(() => {
+    const typeFilterActive = typeDataAvailable && filters.types.length > 0;
+    const priceFilterActive = priceDataAvailable && filters.maximumPrice < 50;
+    const openFilterActive = hoursDataAvailable && filters.openNow;
     const values = washes.filter((wash) => {
       const price = startingPrice(wash);
-      return (!filters.openNow || wash.estimate.operatingStatus === 'open') &&
-        (!filters.types.length || filters.types.some((type) => wash.types.includes(type))) &&
-        (!Number.isFinite(price) || price <= filters.maximumPrice) &&
+      const queueKnown = hasQueueEvidence(wash, wash.estimate);
+      return (!openFilterActive || wash.estimate.operatingStatus === 'open') &&
+        (!typeFilterActive || filters.types.some((type) => wash.types.includes(type))) &&
+        (!priceFilterActive || (Number.isFinite(price) && price <= filters.maximumPrice)) &&
         wash.distanceKm <= filters.maximumDistanceKm &&
-        (filters.queueUnderMinutes === null || wash.estimate.waitMinutes <= filters.queueUnderMinutes);
+        (filters.queueUnderMinutes === null || (queueKnown && wash.estimate.waitMinutes <= filters.queueUnderMinutes));
     });
+    const unknownLast = (known: boolean, value: number) => known ? value : Number.POSITIVE_INFINITY;
     return values.sort((a, b) =>
-      sort === 'Fastest Total Time' ? a.totalMinutes - b.totalMinutes :
-      sort === 'Shortest Queue' ? a.estimate.waitMinutes - b.estimate.waitMinutes :
-      sort === 'Nearest' ? a.distanceKm - b.distanceKm :
-      sort === 'Lowest Price' ? startingPrice(a) - startingPrice(b) :
-      a.score - b.score,
+      sort === 'Fastest Total Time'
+        ? unknownLast(hasQueueEvidence(a, a.estimate), a.totalMinutes) - unknownLast(hasQueueEvidence(b, b.estimate), b.totalMinutes)
+        : sort === 'Shortest Queue'
+          ? unknownLast(hasQueueEvidence(a, a.estimate), a.estimate.waitMinutes) - unknownLast(hasQueueEvidence(b, b.estimate), b.estimate.waitMinutes)
+          : sort === 'Nearest'
+            ? a.distanceKm - b.distanceKm
+            : sort === 'Lowest Price'
+              ? startingPrice(a) - startingPrice(b)
+              : a.score - b.score,
     );
-  }, [filters, sort, washes]);
+  }, [filters, sort, washes, typeDataAvailable, priceDataAvailable, hoursDataAvailable]);
 
-  const explicitlyOpen = filtered.filter(isOpen);
-  const recommendationPool = explicitlyOpen.length ? explicitlyOpen : filtered;
+  const eligible = filtered.filter((wash) => wash.estimate.operatingStatus !== 'closed' && wash.estimate.operatingStatus !== 'unavailable');
+  const explicitlyOpen = eligible.filter(isOpen);
+  const recommendationPool = explicitlyOpen.length ? explicitlyOpen : eligible;
   const best = recommendationPool[0];
-  const fastest = [...recommendationPool].sort((a, b) => a.totalMinutes - b.totalMinutes)[0];
-  const cheapest = [...recommendationPool].sort((a, b) => startingPrice(a) - startingPrice(b))[0];
+  const fastest = recommendationPool.filter((wash) => hasQueueEvidence(wash, wash.estimate)).sort((a, b) => a.totalMinutes - b.totalMinutes)[0];
+  const cheapest = recommendationPool.filter((wash) => Number.isFinite(startingPrice(wash))).sort((a, b) => startingPrice(a) - startingPrice(b))[0];
   const closest = [...recommendationPool].sort((a, b) => a.distanceKm - b.distanceKm)[0];
+  const bestIsFullyInformed = Boolean(best && best.estimate.operatingStatus === 'open' && hasQueueEvidence(best, best.estimate));
 
   useEffect(() => {
     if (!locationReady) {
@@ -88,7 +112,7 @@ export function ExplorePage() {
       {error && <div className="error-banner" role="alert"><span>{error}</span><button onClick={() => void refresh()}>Try again</button></div>}
 
       <section className="hero">
-        <div><p className="eyebrow">A CLEAN CAR. A CLEAR ROUTE.</p><h1>Where should you wash your car <em>right now?</em></h1><p>Compare the drive, queue, wash time and price in one glance.</p></div>
+        <div><p className="eyebrow">A CLEAN CAR. A CLEAR ROUTE.</p><h1>Where should you wash your car <em>right now?</em></h1><p>Compare the drive, queue, wash time and price when that data is available. Unknowns stay marked unknown.</p></div>
         <button className="secondary-button locate-hero" onClick={() => void locate()}><Navigation size={17} /> Use my location</button>
       </section>
 
@@ -100,11 +124,13 @@ export function ExplorePage() {
 
       <div className="filter-chips" aria-label="Wash type filters">
         {chips.map((chip) => {
-          const selected = chip.type ? filters.types.includes(chip.type) : filters.types.length === 0;
-          return <button key={chip.label} className={selected ? 'selected' : ''} onClick={() => setFilters({...filters, types: chip.type ? [chip.type] : []})}>{chip.label}</button>;
+          const selected = chip.type ? typeDataAvailable && filters.types.includes(chip.type) : !typeDataAvailable || filters.types.length === 0;
+          const unavailable = Boolean(chip.type) && !typeDataAvailable;
+          return <button key={chip.label} disabled={unavailable} title={unavailable ? 'Wash types are not verified for these listings yet.' : undefined} className={selected ? 'selected' : ''} onClick={() => setFilters({...filters, types: chip.type ? [chip.type] : []})}>{chip.label}</button>;
         })}
-        <label className="open-toggle"><input type="checkbox" checked={filters.openNow} onChange={(event) => setFilters({...filters, openNow: event.target.checked})} /><span /> Open now</label>
+        <label className="open-toggle" title={!hoursDataAvailable ? 'Business hours are not verified for these listings yet.' : undefined}><input type="checkbox" disabled={!hoursDataAvailable} checked={hoursDataAvailable && filters.openNow} onChange={(event) => setFilters({...filters, openNow: event.target.checked})} /><span /> Open now</label>
       </div>
+      {locationReady && !loading && (!typeDataAvailable || !hoursDataAvailable || !priceDataAvailable) && <p className="search-message" role="status">Some listing details are still being verified. Filters that depend on missing data are disabled rather than guessing.</p>}
 
       {loading ? <LoadingCards /> : best ? (
         <>
@@ -113,14 +139,16 @@ export function ExplorePage() {
             <aside className="recommend-copy">
               <span className="radar-orbit"><LocateFixed size={36} /></span>
               <p className="eyebrow">THE DECISION, MADE CLEAR</p>
-              <h2>Best is more than closest.</h2>
-              <p>WashRadar weighs your drive, queue, wash time, price and data confidence. Paid placements never change this result.</p>
-              <div><CloudSun size={17} /> Weather-ready recommendations</div>
+              <h2>{bestIsFullyInformed ? 'Best is more than closest.' : 'Best available estimate.'}</h2>
+              <p>{bestIsFullyInformed
+                ? 'WashRadar weighs your drive, queue, wash time, price and data confidence. Paid placements never change this result.'
+                : 'Live queue, hours or price data is still limited here. WashRadar uses what is known and adds an uncertainty penalty instead of treating missing data as zero.'}</p>
+              <div><ShieldCheck size={17} /> Unknown data stays visible as unknown</div>
             </aside>
           </div>
           <div className="decision-strip" aria-label="Quick comparisons">
-            <Decision label="Fastest" wash={fastest} value={fastest ? fastest.totalMinutes + ' min total' : '—'} />
-            <Decision label="Cheapest" wash={cheapest} value={cheapest && Number.isFinite(startingPrice(cheapest)) ? '$' + startingPrice(cheapest).toFixed(2) : 'Unknown'} />
+            <Decision label="Fastest known" wash={fastest} value={fastest ? fastest.totalMinutes + ' min total' : 'Queue data needed'} />
+            <Decision label="Cheapest known" wash={cheapest} value={cheapest ? '$' + startingPrice(cheapest).toFixed(2) : 'Price data needed'} />
             <Decision label="Closest" wash={closest} value={closest ? closest.distanceKm.toFixed(1) + ' km' : '—'} />
           </div>
         </>
@@ -131,7 +159,7 @@ export function ExplorePage() {
       {locationReady && <div className="results-bar">
         <h2>Nearby washes <span>{filtered.length}</span></h2>
         <div>
-          <select aria-label="Sort nearby washes" value={sort} onChange={(event) => setSort(event.target.value as SortMode)}>
+          <select aria-label="Sort nearby washes" value={sortOptions.includes(sort) ? sort : 'Recommended'} onChange={(event) => setSort(event.target.value as SortMode)}>
             {sortOptions.map((option) => <option key={option}>{option}</option>)}
           </select>
           <div className="view-toggle" role="group" aria-label="Choose results view">
@@ -148,7 +176,7 @@ export function ExplorePage() {
           </Suspense>{selectedMapWash && <div className="map-preview"><button aria-label="Close map preview" onClick={() => setSelectedMapWash(undefined)}>×</button><WashCard compact wash={selectedMapWash} saved={favourites.includes(selectedMapWash.id)} onSave={() => void toggleFavourite(selectedMapWash.id)} onReport={() => setReportingWash(selectedMapWash)} /></div>}</div>
       )}
 
-      <FilterModal open={filterOpen} filters={filters} onChange={setFilters} onClose={() => setFilterOpen(false)} />
+      <FilterModal open={filterOpen} filters={filters} onChange={setFilters} onClose={() => setFilterOpen(false)} availability={{types: typeDataAvailable, prices: priceDataAvailable, hours: hoursDataAvailable}} />
       <ReportModal open={Boolean(reportingWash)} initialWash={reportingWash} onClose={() => setReportingWash(undefined)} />
       <Modal open={locationPrompt} onClose={() => {localStorage.setItem('wr-location-intro', 'seen'); setLocationPrompt(false);}} title="Find the best wash near you" description="Share your location once to compare nearby drive and queue times. WashRadar does not keep a public GPS trail.">
         <div className="location-consent-actions"><button className="primary-button" onClick={async () => {localStorage.setItem('wr-location-intro', 'seen'); setLocationPrompt(false); await locate();}}>Use my location</button><button className="secondary-button" onClick={() => {localStorage.setItem('wr-location-intro', 'seen'); setLocationPrompt(false);}}>Search manually</button></div>
@@ -159,7 +187,7 @@ export function ExplorePage() {
 
 function isOpen(wash: RankedWash) { return wash.estimate.operatingStatus === 'open'; }
 function Decision({label, wash, value}: {label: string; wash?: RankedWash; value: string}) {
-  return <Link to={wash ? '/wash/' + wash.id : '/'}><small>{label}</small><strong>{wash?.name ?? 'No option'}</strong><span>{value} <ChevronRight size={14} /></span></Link>;
+  return <Link to={wash ? '/wash/' + wash.id : '/'}><small>{label}</small><strong>{wash?.name ?? 'Not enough data'}</strong><span>{value} <ChevronRight size={14} /></span></Link>;
 }
 function LoadingCards() {
   return <div className="loading-grid" aria-label="Loading nearby washes"><div /><div /><div /></div>;
@@ -170,12 +198,14 @@ function EmptyState({locationReady, onLocate, onReset}: {locationReady: boolean;
   }
   return <section className="empty-state"><LocateFixed size={32} /><h2>No washes found nearby yet.</h2><p>Try a wider distance, remove filters or search another area.</p><button className="secondary-button" onClick={onReset}>Reset filters</button></section>;
 }
-function FilterModal({open, filters, onChange, onClose}: {open: boolean; filters: WashFilters; onChange: (filters: WashFilters) => void; onClose: () => void}) {
-  return <Modal open={open} onClose={onClose} title="Find your kind of wash" description="These choices stay on this device.">
-    <label className="field-label">Maximum price · ${filters.maximumPrice}<input type="range" min={5} max={50} value={filters.maximumPrice} onChange={(event) => onChange({...filters, maximumPrice: Number(event.target.value)})} /></label>
+function FilterModal({open, filters, onChange, onClose, availability}: {open: boolean; filters: WashFilters; onChange: (filters: WashFilters) => void; onClose: () => void; availability: {types: boolean; prices: boolean; hours: boolean}}) {
+  return <Modal open={open} onClose={onClose} title="Find your kind of wash" description="Filters only use verified fields. Missing data is never treated as a match.">
+    <label className="field-label">Maximum price · {availability.prices ? '$' + filters.maximumPrice : 'Price data unavailable'}<input disabled={!availability.prices} type="range" min={5} max={50} value={filters.maximumPrice} onChange={(event) => onChange({...filters, maximumPrice: Number(event.target.value)})} /></label>
     <label className="field-label">Maximum distance · {filters.maximumDistanceKm} km<input type="range" min={1} max={50} value={filters.maximumDistanceKm} onChange={(event) => onChange({...filters, maximumDistanceKm: Number(event.target.value)})} /></label>
-    <label className="field-label">Queue limit<select value={filters.queueUnderMinutes ?? 'any'} onChange={(event) => onChange({...filters, queueUnderMinutes: event.target.value === 'any' ? null : Number(event.target.value)})}><option value="any">Any wait</option><option value={10}>Under 10 minutes</option><option value={20}>Under 20 minutes</option></select></label>
-    <div className="type-grid">{Object.entries(WASH_TYPE_CONFIG).map(([type, data]) => <label key={type}><input type="checkbox" checked={filters.types.includes(type as WashType)} onChange={(event) => onChange({...filters, types: event.target.checked ? [...filters.types, type as WashType] : filters.types.filter((item) => item !== type)})} /> {data.label}</label>)}</div>
+    <label className="field-label">Queue limit<select value={filters.queueUnderMinutes ?? 'any'} onChange={(event) => onChange({...filters, queueUnderMinutes: event.target.value === 'any' ? null : Number(event.target.value)})}><option value="any">Any wait / unknown allowed</option><option value={10}>Known queue under 10 minutes</option><option value={20}>Known queue under 20 minutes</option></select></label>
+    {!availability.types && <p className="search-message">Wash types are not verified for these listings yet, so type filters are disabled.</p>}
+    {!availability.hours && <p className="search-message">Business hours are not verified yet. “Open now” stays off until they are.</p>}
+    <div className="type-grid">{Object.entries(WASH_TYPE_CONFIG).map(([type, data]) => <label key={type}><input disabled={!availability.types} type="checkbox" checked={availability.types && filters.types.includes(type as WashType)} onChange={(event) => onChange({...filters, types: event.target.checked ? [...filters.types, type as WashType] : filters.types.filter((item) => item !== type)})} /> {data.label}</label>)}</div>
     <button className="primary-button full" onClick={onClose}>Show washes</button>
   </Modal>;
 }

@@ -106,7 +106,7 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
         return;
       }
 
-      const [{washes: rawWashes, signals}, favouriteIds, savedAlerts, activeSession, authState, contributionMetrics] = await Promise.all([
+      const [{washes: rawWashes, signals: freshSignals}, favouriteIds, savedAlerts, activeSession, authState, contributionMetrics] = await Promise.all([
         repository.loadWashes(origin, Math.max(filters.maximumDistanceKm, 25)),
         repository.getFavouriteIds(),
         repository.getAlerts(),
@@ -115,8 +115,8 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
         repository.metrics(),
       ]);
       if (version !== refreshVersion.current) return;
-      setWashes(rankWashes(rawWashes, signals, origin, {preferredTypes: filters.types}));
-      setSignals(signals);
+      setWashes(rankWashes(rawWashes, freshSignals, origin, {preferredTypes: filters.types}));
+      setSignals(freshSignals);
       setFavourites(favouriteIds);
       setAlerts(savedAlerts);
       setSession(activeSession);
@@ -125,7 +125,7 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
       setError('');
       void repository.routeTimes(origin, rawWashes).then((routeMinutes) => {
         if (version === refreshVersion.current && Object.keys(routeMinutes).length) {
-          setWashes(rankWashes(rawWashes, signals, origin, {preferredTypes: filters.types, routeMinutes}));
+          setWashes(rankWashes(rawWashes, freshSignals, origin, {preferredTypes: filters.types, routeMinutes}));
         }
       });
     } catch (caught) {
@@ -156,6 +156,23 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
       window.removeEventListener('offline', offlineHandler);
     };
   }, [refresh]);
+
+  // Queue evidence decays with time even when nobody submits another report. Re-rank
+  // locally once a minute so LIVE/RECENT/ESTIMATED labels cannot become stale on an
+  // open screen. This does not call Google or Supabase and therefore adds no API cost.
+  useEffect(() => {
+    if (!locationReady) return;
+    const timer = window.setInterval(() => {
+      setWashes((current) => {
+        if (!current.length) return current;
+        const routeMinutes = Object.fromEntries(current
+          .filter((wash) => wash.driveTimeSource === 'ROUTE')
+          .map((wash) => [wash.id, wash.driveMinutes]));
+        return rankWashes(current, signals, origin, {preferredTypes: filters.types, routeMinutes}, new Date());
+      });
+    }, 60_000);
+    return () => window.clearInterval(timer);
+  }, [filters.types, locationReady, origin, signals]);
 
   useEffect(() => {
     if (!session || session.verification === 'remote' || !navigator.geolocation) return;
@@ -220,18 +237,41 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
     analytics.track('favourite', {washId, saved: save});
   }, [favourites]);
 
+  // A queue report should use a fresh GPS sample, not the location captured when the
+  // user first opened the app. Coarse/blocked GPS does not stop contribution; it simply
+  // removes the location proof so the backend treats the report as low-trust remote data.
   const submitReport = useCallback(async (input: Omit<QueueReportInput, 'position'>) => {
-    const result = await repository.submitReport({...input, position: currentPosition});
+    let verifiedPosition: Point | undefined;
+    try {
+      const freshLocation = await requestLocation();
+      setCurrentPosition(freshLocation.point);
+      if (freshLocation.accuracy <= QUEUE_CONFIG.maximumAccurateGpsMetres) verifiedPosition = freshLocation.point;
+    } catch {
+      verifiedPosition = undefined;
+    }
+    const result = await repository.submitReport({...input, position: verifiedPosition});
     analytics.track('queue_report_completed', {washId: input.washId, verification: result.verification});
     await refresh();
     return result.verification;
-  }, [currentPosition, refresh]);
+  }, [refresh]);
 
+  // Queue timers are stronger evidence than quick reports, so they require a fresh,
+  // accurate GPS fix and a local proximity check before the server is called.
   const startSession = useCallback(async (washId: string, bucket?: QueueBucket) => {
-    const started = await repository.startQueueSession(washId, currentPosition, bucket);
+    const wash = washes.find((item) => item.id === washId);
+    if (!wash) throw new Error('This wash is not available right now.');
+    const freshLocation = await requestLocation();
+    setCurrentPosition(freshLocation.point);
+    if (freshLocation.accuracy > QUEUE_CONFIG.maximumAccurateGpsMetres) {
+      throw new Error('GPS accuracy is too low to verify a queue timer. Try again in a moment or move closer to the wash entrance.');
+    }
+    if (distanceKm(freshLocation.point, wash.position) > QUEUE_CONFIG.nearbyRadiusKm) {
+      throw new Error('You need to be at this car wash to start a verified queue timer. Quick queue reports still work from anywhere.');
+    }
+    const started = await repository.startQueueSession(washId, freshLocation.point, bucket);
     setSession(started);
     analytics.track('queue_session_started', {washId, verification: started.verification});
-  }, [currentPosition]);
+  }, [washes]);
 
   const finishSession = useCallback(async (action: 'completed' | 'cancelled') => {
     const finished = await repository.finishQueueSession(action);

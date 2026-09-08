@@ -31,6 +31,10 @@ export const RECOMMENDATION_WEIGHTS = {
   preferredTypeBonus: -2.75,
   goodWeatherBonus: -0.35,
   poorWeatherPenalty: 0.5,
+  unknownHoursPenalty: 6,
+  unknownQueuePenalty: 9,
+  unknownPricePenalty: 1.5,
+  unknownWashTypePenalty: 1,
 } as const;
 
 export const DEFAULT_FILTERS: WashFilters = {
