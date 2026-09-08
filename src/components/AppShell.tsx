@@ -13,7 +13,7 @@ const navigation = [
 ];
 
 export function AppShell() {
-  const {locationLabel, locate, alerts} = useWashRadar();
+  const {locationLabel, locationReady, locate, alerts} = useWashRadar();
   const [reportOpen, setReportOpen] = useState(false);
   const [updateReady, setUpdateReady] = useState(false);
   useEffect(() => {
@@ -30,7 +30,7 @@ export function AppShell() {
           {navigation.slice(0, 3).map((item) => <NavLink key={item.to} to={item.to}>{item.label}</NavLink>)}
           <button onClick={() => setReportOpen(true)}>Report</button>
         </nav>
-        <button className="location-button" onClick={() => void locate()}><MapPin size={16} /><span>{locationLabel}</span><small>Change</small></button>
+        <button className="location-button" onClick={() => void locate()}><MapPin size={16} /><span>{locationLabel}</span><small>{locationReady ? 'Change' : 'Set'}</small></button>
         <NavLink className="profile-link" to="/profile" aria-label="Profile"><User size={19} /></NavLink>
       </header>
       <QueueSessionBanner />
