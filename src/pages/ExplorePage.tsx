@@ -34,7 +34,14 @@ export function ExplorePage() {
   const [ad, setAd] = useState<AdCreative | null>(null);
   const [locationPrompt, setLocationPrompt] = useState(() => localStorage.getItem('wr-location-intro') !== 'seen');
 
-  const typeDataAvailable = washes.some((wash) => wash.types.length > 0);
+  const typeCounts = useMemo(() => {
+    const counts = new Map<WashType, number>();
+    for (const chip of chips) {
+      if (chip.type) counts.set(chip.type, washes.filter((wash) => wash.types.includes(chip.type!)).length);
+    }
+    return counts;
+  }, [washes]);
+  const typeDataAvailable = [...typeCounts.values()].some((count) => count > 0);
   const priceDataAvailable = washes.some((wash) => Number.isFinite(startingPrice(wash)));
   const hoursDataAvailable = washes.some((wash) => wash.estimate.operatingStatus !== 'unknown');
   const queueDataAvailable = washes.some((wash) => hasQueueEvidence(wash, wash.estimate));
@@ -124,9 +131,10 @@ export function ExplorePage() {
 
       <div className="filter-chips" aria-label="Wash type filters">
         {chips.map((chip) => {
-          const selected = chip.type ? typeDataAvailable && filters.types.includes(chip.type) : !typeDataAvailable || filters.types.length === 0;
-          const unavailable = Boolean(chip.type) && !typeDataAvailable;
-          return <button key={chip.label} disabled={unavailable} title={unavailable ? 'Wash types are not verified for these listings yet.' : undefined} className={selected ? 'selected' : ''} onClick={() => setFilters({...filters, types: chip.type ? [chip.type] : []})}>{chip.label}</button>;
+          const count = chip.type ? typeCounts.get(chip.type) ?? 0 : washes.length;
+          const selected = chip.type ? count > 0 && filters.types.includes(chip.type) : filters.types.length === 0;
+          const unavailable = Boolean(chip.type) && count === 0;
+          return <button key={chip.label} disabled={unavailable} title={unavailable ? `No verified ${chip.label.toLowerCase()} listings nearby yet.` : undefined} className={selected ? 'selected' : ''} onClick={() => setFilters({...filters, types: chip.type ? [chip.type] : []})}><span>{chip.label}</span>{chip.type && count > 0 && <small>{count}</small>}</button>;
         })}
         <label className="open-toggle" title={!hoursDataAvailable ? 'Business hours are not verified for these listings yet.' : undefined}><input type="checkbox" disabled={!hoursDataAvailable} checked={hoursDataAvailable && filters.openNow} onChange={(event) => setFilters({...filters, openNow: event.target.checked})} /><span /> Open now</label>
       </div>
