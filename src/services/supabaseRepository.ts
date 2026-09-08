@@ -137,7 +137,7 @@ export class SupabaseRepository implements WashRepository {
   }
 
   async loadWashes(origin: Point, radiusKm = 50) {
-    const {data, error} = await this.client.rpc('nearby_washes', {p_lat: origin.lat, p_lng: origin.lng, p_radius_km: radiusKm});
+    const {data, error} = await this.client.rpc('nearby_washes_json', {p_lat: origin.lat, p_lng: origin.lng, p_radius_km: radiusKm});
     if (error) throw new Error('Nearby washes could not be loaded.');
     const rows = (data ?? []) as DirectoryRow[];
     const ids = rows.map((row) => row.id);
