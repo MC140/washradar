@@ -48,7 +48,7 @@ export interface CarWash {
   postalCode: string;
   position: Point;
   types: WashType[];
-  typeTruth: WashTypeTruth[];
+  typeTruth?: WashTypeTruth[];
   packages: WashPackage[];
   status: OperatingStatus;
   rating: number | null;
