@@ -1,4 +1,4 @@
-import {ArrowUpRight, Car, Clock3, Droplets, Heart, MapPin, ShieldCheck, Star} from 'lucide-react';
+import {Car, Clock3, Droplets, Heart, MapPin, Navigation, ShieldCheck, Star} from 'lucide-react';
 import {Link} from 'react-router-dom';
 import {WASH_TYPE_CONFIG} from '../domain/config';
 import {hasQueueEvidence, startingPrice} from '../domain/engine';
@@ -60,6 +60,7 @@ export function WashCard({
           <p><MapPin size={14} /> {wash.address} · {wash.distanceKm.toFixed(1)} km</p>
         </div>
         <div className={'queue-number ' + queueTone}>
+          <button className="quick-directions" onClick={directions} aria-label={'Get directions to ' + wash.name}><Navigation size={13} /> Directions</button>
           <strong>{unavailable || queueMinutes === null ? '—' : estimatedPrefix + queueMinutes}</strong>
           <span>{status === 'closed' ? 'Closed' : status === 'unavailable' ? 'Unavailable' : queueMinutes === null ? 'queue unknown' : 'min queue'}</span>
         </div>
@@ -94,8 +95,7 @@ export function WashCard({
       {wash.reasons.length > 0 && <p className="decision-reason">{wash.reasons[0]}</p>}
 
       <div className="card-actions">
-        <button className="primary-button" onClick={directions}><ArrowUpRight size={17} /> Directions</button>
-        {onReport && <button className="secondary-button" onClick={onReport}>Share what you see</button>}
+        {onReport && <button className="queue-update-button" onClick={onReport}>Update queue</button>}
         <Link className="secondary-button" to={'/wash/' + wash.id} onClick={() => {
           analytics.track('wash_viewed', {washId: wash.id});
           if (best) analytics.track('best_right_now_selected', {washId: wash.id});
