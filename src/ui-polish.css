@@ -33,6 +33,21 @@
 }
 .queue-update-button:hover { background: #ffeaa5; border-color: #dfc76d; }
 
+.filter-chips button { display: inline-flex; align-items: center; gap: 6px; }
+.filter-chips button small {
+  min-width: 18px;
+  height: 18px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #dceae4;
+  color: #38564a;
+  font-size: 9px;
+  font-weight: 800;
+}
+.filter-chips button.selected small { color: var(--green); background: white; }
+
 /* Missing verification should be clear without making the category bar look disabled as a whole. */
 .filter-chips button:disabled {
   opacity: .72;
