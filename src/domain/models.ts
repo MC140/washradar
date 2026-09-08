@@ -8,6 +8,12 @@ export type WashType =
   | 'hand-wash'
   | 'tunnel';
 
+export interface WashTypeTruth {
+  washType: WashType;
+  confidenceScore: number;
+  sourceLabel: string;
+}
+
 export type OperatingStatus = 'open' | 'closed' | 'unavailable' | 'unknown';
 export type QueueDataState = 'LIVE' | 'RECENT REPORT' | 'ESTIMATED';
 export type ConfidenceLabel = 'High' | 'Medium' | 'Low' | 'Limited Data' | 'Historical Estimate';
@@ -42,6 +48,7 @@ export interface CarWash {
   postalCode: string;
   position: Point;
   types: WashType[];
+  typeTruth: WashTypeTruth[];
   packages: WashPackage[];
   status: OperatingStatus;
   rating: number | null;
