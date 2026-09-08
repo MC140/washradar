@@ -1,15 +1,29 @@
 import type {Point, RankedWash} from '../domain/models';
 
 export function requestLocation(): Promise<{point: Point; accuracy: number}> {
-  if (!navigator.geolocation) return Promise.reject(new Error('GPS is unavailable on this device.'));
+  if (!navigator.geolocation) return Promise.reject(new Error('GPS is unavailable in this browser. Search by city, postal code or address instead.'));
   return new Promise((resolve, reject) => {
     navigator.geolocation.getCurrentPosition(
       (position) => resolve({
         point: {lat: position.coords.latitude, lng: position.coords.longitude},
         accuracy: position.coords.accuracy,
       }),
-      () => reject(new Error('Location was not shared. Search by city, postal code or address instead.')),
-      {enableHighAccuracy: false, timeout: 10_000, maximumAge: 60_000},
+      (error) => {
+        if (error.code === error.PERMISSION_DENIED) {
+          reject(new Error('Location permission is blocked for this site. Allow location access in your browser settings, then try again.'));
+          return;
+        }
+        if (error.code === error.POSITION_UNAVAILABLE) {
+          reject(new Error('Your location could not be determined right now. Try again outdoors or search by city, postal code or address.'));
+          return;
+        }
+        if (error.code === error.TIMEOUT) {
+          reject(new Error('Location lookup timed out. Try again or search by city, postal code or address.'));
+          return;
+        }
+        reject(new Error('Location was not shared. Search by city, postal code or address instead.'));
+      },
+      {enableHighAccuracy: true, timeout: 15_000, maximumAge: 30_000},
     );
   });
 }
