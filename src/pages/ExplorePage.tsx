@@ -23,7 +23,7 @@ const chips: {type?: WashType; label: string}[] = [
 ];
 
 export function ExplorePage() {
-  const {mode, origin, washes, loading, error, offline, filters, setFilters, sort, setSort, favourites, toggleFavourite, locate, search, refresh} = useWashRadar();
+  const {mode, origin, locationReady, washes, loading, error, offline, filters, setFilters, sort, setSort, favourites, toggleFavourite, locate, search, refresh} = useWashRadar();
   const [view, setView] = useState<'list' | 'map'>('list');
   const [query, setQuery] = useState('');
   const [filterOpen, setFilterOpen] = useState(false);
@@ -55,10 +55,14 @@ export function ExplorePage() {
   const closest = [...filtered].filter(isOpen).sort((a, b) => a.distanceKm - b.distanceKm)[0];
 
   useEffect(() => {
+    if (!locationReady) {
+      setAd(null);
+      return;
+    }
     let cancelled = false;
     void repository.getAd('explore_nearby_offer', origin).then((creative) => !cancelled && setAd(creative));
     return () => { cancelled = true; };
-  }, [origin]);
+  }, [locationReady, origin]);
 
   const submitSearch = async () => {
     if (query.trim().length < 2) return;
@@ -84,7 +88,7 @@ export function ExplorePage() {
       </section>
 
       <form className="search-row" onSubmit={(event) => {event.preventDefault(); void submitSearch();}}>
-        <label className="search-box"><Search size={20} /><span className="sr-only">Search city, postal code or address</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search city, postal code or address" /></label>
+        <label className="search-box"><Search size={20} /><span className="sr-only">Search city, postal code or address</span><input value={query} onChange={(event) => {setQuery(event.target.value); if (searchMessage) setSearchMessage('');}} placeholder="Search city, postal code or address" /></label>
         <button className="filter-button" type="button" onClick={() => setFilterOpen(true)}><SlidersHorizontal size={19} /><span>Filters</span></button>
       </form>
       {searchMessage && <p className="search-message" role="status">{searchMessage}</p>}
@@ -115,11 +119,11 @@ export function ExplorePage() {
             <Decision label="Closest" wash={closest} value={closest ? closest.distanceKm.toFixed(1) + ' km' : '—'} />
           </div>
         </>
-      ) : !loading && <EmptyState onReset={() => setFilters({...filters, types: [], maximumDistanceKm: 50, maximumPrice: 50, queueUnderMinutes: null, openNow: false})} />}
+      ) : !loading && <EmptyState locationReady={locationReady} onLocate={locate} onReset={() => setFilters({...filters, types: [], maximumDistanceKm: 50, maximumPrice: 50, queueUnderMinutes: null, openNow: false})} />}
 
       {ad && <NearbyOffer ad={ad} placement="explore_nearby_offer" />}
 
-      <div className="results-bar">
+      {locationReady && <div className="results-bar">
         <h2>Nearby washes <span>{filtered.length}</span></h2>
         <div>
           <select aria-label="Sort nearby washes" value={sort} onChange={(event) => setSort(event.target.value as SortMode)}>
@@ -130,9 +134,9 @@ export function ExplorePage() {
             <button className={view === 'map' ? 'active' : ''} onClick={() => setView('map')}><MapIcon size={16} /> Map</button>
           </div>
         </div>
-      </div>
+      </div>}
 
-      {!loading && filtered.length > 0 && (view === 'list'
+      {locationReady && !loading && filtered.length > 0 && (view === 'list'
         ? <div className="cards-grid">{filtered.map((wash) => <WashCard key={wash.id} wash={wash} saved={favourites.includes(wash.id)} onSave={() => void toggleFavourite(wash.id)} />)}</div>
         : <div className="map-section"><Suspense fallback={<div className="map-skeleton" />}>
             <MapView washes={filtered} origin={origin} selectedId={selectedMapWash?.id} onSelect={setSelectedMapWash} />
@@ -154,8 +158,11 @@ function Decision({label, wash, value}: {label: string; wash?: RankedWash; value
 function LoadingCards() {
   return <div className="loading-grid" aria-label="Loading nearby washes"><div /><div /><div /></div>;
 }
-function EmptyState({onReset}: {onReset: () => void}) {
-  return <section className="empty-state"><LocateFixed size={32} /><h2>No washes match these filters.</h2><p>Try a wider distance or include closed locations.</p><button className="secondary-button" onClick={onReset}>Reset filters</button></section>;
+function EmptyState({locationReady, onLocate, onReset}: {locationReady: boolean; onLocate: () => Promise<void>; onReset: () => void}) {
+  if (!locationReady) {
+    return <section className="empty-state"><LocateFixed size={32} /><h2>Set your location to find nearby washes.</h2><p>Use your current location or search by city, postal code or address.</p><button className="primary-button" onClick={() => void onLocate()}>Use my location</button></section>;
+  }
+  return <section className="empty-state"><LocateFixed size={32} /><h2>No washes found nearby yet.</h2><p>Try a wider distance, remove filters or search another area.</p><button className="secondary-button" onClick={onReset}>Reset filters</button></section>;
 }
 function FilterModal({open, filters, onChange, onClose}: {open: boolean; filters: WashFilters; onChange: (filters: WashFilters) => void; onClose: () => void}) {
   return <Modal open={open} onClose={onClose} title="Find your kind of wash" description="These choices stay on this device.">
