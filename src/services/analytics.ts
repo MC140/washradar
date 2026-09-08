@@ -7,6 +7,7 @@ export type AnalyticsEvent =
   | 'best_right_now_selected'
   | 'queue_report_started'
   | 'queue_report_completed'
+  | 'wash_type_reported'
   | 'queue_session_started'
   | 'queue_session_completed'
   | 'favourite'
