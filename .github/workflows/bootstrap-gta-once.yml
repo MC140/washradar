@@ -13,12 +13,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Import GTA catalogue in resumable batches
+      - name: Import GTA catalogue in two resumable batches
         run: |
           set -euo pipefail
           URL='https://mwyomijlvjfllgeniqcz.supabase.co/functions/v1/catalogue-bootstrap-run'
           done_flag=false
-          for i in 1 2 3 4 5 6; do
+          for i in 1 2; do
             echo "Bootstrap batch $i"
             body=$(curl --silent --show-error "$URL")
             echo "$body"
