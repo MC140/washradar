@@ -83,7 +83,7 @@ Deno.serve(async (request) => {
       db.from('queue_reports').select('id', {head: true, count: 'exact'}).eq('actor_hash', actorHash).gte('created_at', oneHourAgo),
       db.from('queue_reports').select('id', {head: true, count: 'exact'}).eq('actor_hash', actorHash).eq('wash_id', input.washId).gte('created_at', oneHourAgo),
       db.from('queue_reports').select('id,report_kind,queue_bucket,created_at,report_minute')
-        .eq('actor_hash', actorHash).eq('wash_id', input.washId).order('created_at', {ascending: false}).limit(1).maybeSingle(),
+        .eq('actor_hash', actorHash).eq('wash_id', input.washId).neq('report_kind', 'session').order('created_at', {ascending: false}).limit(1).maybeSingle(),
       db.from('contributor_reputation').select('score').eq('user_id', user.id).maybeSingle(),
     ]);
 
@@ -260,22 +260,24 @@ async function recalculate(washId: string) {
   let weighted = historicalWait * historicalWeight;
   let totalWeight = historicalWeight;
   let latest: Date | null = null;
-  let weightedDisagreement = 0;
-  let disagreementWeight = 0;
 
   for (const item of weightedInputs) {
     const agreement = agreementFactor(item.wait, consensus);
     const weight = item.baseWeight * agreement;
     weighted += item.wait * weight;
     totalWeight += weight;
-    weightedDisagreement += Math.abs(item.wait - consensus) * item.baseWeight;
-    disagreementWeight += item.baseWeight;
     const createdAt = new Date(item.report.created_at);
     if (!latest || createdAt > latest) latest = createdAt;
   }
 
   const waitMinutes = totalWeight > 0 ? Math.round(weighted / totalWeight) : 0;
-  const disagreement = disagreementWeight > 0 ? weightedDisagreement / disagreementWeight : 0;
+  const strongAgreementInputs = weightedInputs.filter((item) => item.report.proximity !== 'remote');
+  const agreementInputs = strongAgreementInputs.length ? strongAgreementInputs : weightedInputs;
+  const agreementConsensus = weightedMedian(agreementInputs.map((item) => ({wait: item.wait, weight: item.baseWeight})));
+  const disagreementWeight = agreementInputs.reduce((sum, item) => sum + item.baseWeight, 0);
+  const disagreement = disagreementWeight > 0
+    ? agreementInputs.reduce((sum, item) => sum + Math.abs(item.wait - agreementConsensus) * item.baseWeight, 0) / disagreementWeight
+    : 0;
   const freshStrong = weightedInputs.filter((item) => item.age <= 10 && item.report.proximity !== 'remote');
   const freshSessions = freshStrong.filter((item) => item.report.proximity === 'session');
   const freshRemote = weightedInputs.filter((item) => item.age <= 10 && item.report.proximity === 'remote');
