@@ -1,7 +1,7 @@
 import {ArrowUpRight, Car, Clock3, Droplets, Heart, MapPin, ShieldCheck, Star} from 'lucide-react';
 import {Link} from 'react-router-dom';
 import {WASH_TYPE_CONFIG} from '../domain/config';
-import {startingPrice} from '../domain/engine';
+import {hasQueueEvidence, startingPrice} from '../domain/engine';
 import type {RankedWash} from '../domain/models';
 import {analytics} from '../services/analytics';
 import {directionsUrl} from '../services/location';
@@ -25,7 +25,7 @@ export function WashCard({
   const status = wash.estimate.operatingStatus;
   const open = status === 'open';
   const unavailable = status === 'closed' || status === 'unavailable';
-  const hasQueueData = wash.estimate.recentSignalCount > 0 || wash.historicalSampleCount > 0;
+  const hasQueueData = hasQueueEvidence(wash, wash.estimate);
   const queueMinutes = !unavailable && hasQueueData ? wash.estimate.waitMinutes : null;
   const startsInMinutes = queueMinutes === null ? null : wash.driveMinutes + queueMinutes;
   const doneInMinutes = startsInMinutes === null ? null : startsInMinutes + wash.estimatedWashMinutes;
@@ -33,6 +33,8 @@ export function WashCard({
   const price = startingPrice(wash);
   const queueTone = unavailable || queueMinutes === null ? '' : queueMinutes <= 10 ? 'short' : queueMinutes <= 25 ? 'moderate' : 'long';
   const statusLabel = open ? 'Open now' : status === 'closed' ? 'Closed' : status === 'unavailable' ? 'Unavailable' : 'Hours unknown';
+  const bestLabel = open && hasQueueData ? 'BEST RIGHT NOW' : 'BEST AVAILABLE ESTIMATE';
+  const trustState = hasQueueData ? wash.estimate.dataState : 'LIMITED DATA';
   const directions = () => {
     analytics.track('directions_clicked', {washId: wash.id, from: best ? 'best' : 'card'});
     window.open(directionsUrl(wash), '_blank', 'noopener,noreferrer');
@@ -41,7 +43,7 @@ export function WashCard({
   return (
     <article className={'wash-card ' + (best ? 'best-card' : '') + (compact ? ' compact-card' : '')}>
       <div className="card-kicker">
-        {best ? <span className="eyebrow"><span aria-hidden="true">✦</span> BEST RIGHT NOW</span> : <span className="wash-icon"><Droplets size={20} /></span>}
+        {best ? <span className="eyebrow"><span aria-hidden="true">✦</span> {bestLabel}</span> : <span className="wash-icon"><Droplets size={20} /></span>}
         <button className={'icon-button ' + (saved ? 'is-saved' : '')} onClick={onSave} aria-label={saved ? 'Remove from saved washes' : 'Save this wash'}>
           <Heart size={20} fill={saved ? 'currentColor' : 'none'} />
         </button>
@@ -65,6 +67,7 @@ export function WashCard({
 
       <div className="tag-row">
         {wash.types.slice(0, 2).map((type) => <span key={type}>{WASH_TYPE_CONFIG[type].label}</span>)}
+        {!wash.types.length && <span>Wash type unknown</span>}
         <span>{Number.isFinite(price) ? 'From ' + money(price) : 'Price unknown'}</span>
         <span className={open ? 'open-tag' : unavailable ? 'closed-tag' : ''}>{statusLabel}</span>
       </div>
@@ -76,15 +79,15 @@ export function WashCard({
       >
         <span><Car size={16} /><b>{wash.driveMinutes}m</b><small>Drive</small></span>
         <span><Clock3 size={16} /><b>{queueMinutes === null ? '—' : estimatedPrefix + queueMinutes + 'm'}</b><small>{wash.estimate.estimatedCars !== null ? 'Queue · ~' + wash.estimate.estimatedCars + ' cars' : 'Queue'}</small></span>
-        <span><Droplets size={16} /><b>~{wash.estimatedWashMinutes}m</b><small>Wash</small></span>
+        <span><Droplets size={16} /><b>~{wash.estimatedWashMinutes}m</b><small>Wash est.</small></span>
         <span><Clock3 size={16} /><b>{startsInMinutes === null ? '—' : '~' + startsInMinutes + 'm'}</b><small>Starts in</small></span>
         <span className="total"><b>{doneInMinutes === null ? '—' : '~' + doneInMinutes + 'm'}</b><small>Done in</small></span>
       </div>
 
       <div className="trust-row">
-        <span className={'data-state ' + wash.estimate.dataState.toLowerCase().replace(' ', '-')}>{wash.estimate.dataState}</span>
-        <span><ShieldCheck size={14} /> {wash.estimate.confidenceLabel}</span>
-        <span>{minutesAgo(wash.estimate.lastUpdatedAt)}</span>
+        <span className={'data-state ' + (hasQueueData ? wash.estimate.dataState.toLowerCase().replace(' ', '-') : 'estimated')}>{trustState}</span>
+        <span><ShieldCheck size={14} /> {hasQueueData ? wash.estimate.confidenceLabel : 'Queue unknown'}</span>
+        <span>{hasQueueData ? minutesAgo(wash.estimate.lastUpdatedAt) : 'No queue evidence yet'}</span>
         {wash.rating !== null && <span><Star size={14} fill="currentColor" /> {wash.rating.toFixed(1)} <small>({wash.ratingCount})</small></span>}
       </div>
 
