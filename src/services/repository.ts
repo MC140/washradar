@@ -22,6 +22,22 @@ export interface AdminSnapshot {
   reports: {id: string; washId: string; kind: string; createdAt: string; disabled: boolean; verification: string}[];
 }
 
+export interface CatalogueImportProgress {
+  area: string;
+  completed: number;
+  total: number;
+  discovered: number;
+  imported: number;
+  updated: number;
+}
+
+export interface CatalogueImportResult {
+  discovered: number;
+  imported: number;
+  updated: number;
+  areasCompleted: number;
+}
+
 export interface WashRepository {
   readonly mode: 'demo' | 'supabase' | 'unavailable';
   loadWashes(origin: Point, radiusKm?: number): Promise<{washes: CarWash[]; signals: QueueSignal[]}>;
@@ -46,6 +62,7 @@ export interface WashRepository {
   metrics(): Promise<ContributionMetrics>;
   adminSnapshot(): Promise<AdminSnapshot>;
   moderateReport(id: string, disabled: boolean): Promise<void>;
+  bootstrapGtaCatalogue(onProgress?: (progress: CatalogueImportProgress) => void): Promise<CatalogueImportResult>;
 }
 
 export class UnavailableRepository implements WashRepository {
@@ -62,7 +79,7 @@ export class UnavailableRepository implements WashRepository {
   finishQueueSession(): Promise<QueueSession | null> { return Promise.reject(this.failure()); }
   getActiveQueueSession(): Promise<QueueSession | null> { return Promise.resolve(null); }
   getFavouriteIds(): Promise<string[]> { return Promise.resolve(readJson('wr-favourites', [])); }
-  toggleFavourite(washId: string, saved: boolean): Promise<void> {
+  toggleFavourite(washId: string, saved: boolean) {
     const current = new Set<string>(readJson('wr-favourites', []));
     if (saved) current.add(washId);
     else current.delete(washId);
@@ -81,6 +98,7 @@ export class UnavailableRepository implements WashRepository {
   metrics(): Promise<ContributionMetrics> { return Promise.resolve({reportsSubmitted: 0, completedWaits: 0, reputation: 50, streakDays: 0}); }
   adminSnapshot(): Promise<AdminSnapshot> { return Promise.reject(this.failure()); }
   moderateReport(): Promise<void> { return Promise.reject(this.failure()); }
+  bootstrapGtaCatalogue(): Promise<CatalogueImportResult> { return Promise.reject(this.failure()); }
 }
 
 export function readJson<T>(key: string, fallback: T): T {
