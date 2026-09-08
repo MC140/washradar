@@ -2,7 +2,7 @@ import {DEMO_ADS, DEMO_WASHES, createDemoSignals} from '../data/demo';
 import {proximityFor, validateReport} from '../domain/abuse';
 import {queueBucketToWait} from '../domain/engine';
 import type {Point, QueueAlert, QueueReportInput, QueueSession, QueueSignal} from '../domain/models';
-import {clientId, readJson, type AdminSnapshot, type ContributionMetrics, type WashRepository} from './repository';
+import {clientId, readJson, type AdminSnapshot, type CatalogueImportResult, type ContributionMetrics, type WashRepository} from './repository';
 import {geocodeDemoSearch} from './location';
 import {rankWashes} from '../domain/engine';
 
@@ -195,5 +195,8 @@ export class DemoRepository implements WashRepository {
     const state = loadState();
     state.signals = state.signals.map((signal) => signal.id === id ? {...signal, disabled} : signal);
     saveState(state);
+  }
+  async bootstrapGtaCatalogue(): Promise<CatalogueImportResult> {
+    throw new Error('GTA catalogue bootstrap is available only in production mode.');
   }
 }
