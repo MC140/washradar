@@ -28,14 +28,15 @@ export function ReportModal({open, initialWash, onClose}: {open: boolean; initia
   const [message, setMessage] = useState('');
   const [failed, setFailed] = useState(false);
   const wash = useMemo(() => washes.find((item) => item.id === washId), [washId, washes]);
+  const initialWashId = initialWash?.id;
 
   useEffect(() => {
-    if (!open || !initialWash) return;
-    setWashId(initialWash.id);
+    if (!open || !initialWashId) return;
+    setWashId(initialWashId);
     setMessage('');
     setFailed(false);
-    analytics.track('queue_report_started', {washId: initialWash.id});
-  }, [open, initialWash?.id]);
+    analytics.track('queue_report_started', {washId: initialWashId});
+  }, [open, initialWashId]);
 
   const send = async (kind: QueueSignal['kind'], queueBucket?: QueueBucket) => {
     if (!wash) return;
@@ -43,7 +44,7 @@ export function ReportModal({open, initialWash, onClose}: {open: boolean; initia
     setMessage('');
     setFailed(false);
     try {
-      const verification = await submitReport({washId: wash.id, kind, queueBucket, position: currentPosition ?? undefined});
+      const verification = await submitReport({washId: wash.id, kind, queueBucket});
       setMessage(verification === 'nearby'
         ? 'Thanks — your nearby report is helping drivers right now.'
         : 'Thanks — saved as a remote report with lower weight.');
