@@ -64,7 +64,7 @@ test('a farther wash with no queue can beat the closest congested wash', () => {
   assert.equal(ranked[0].id, farther.id);
 });
 test('low-confidence options receive an uncertainty penalty', () => {
-  const confident = {...DEMO_WASHES[0], historicalSampleCount: 30};
+  const confident = {...DEMO_WASHES[0], historicalWaitMinutes: 0, historicalSampleCount: 30};
   const uncertain = {...confident, id: DEMO_WASHES[1].id, historicalSampleCount: 0};
   const ranked = rankWashes([uncertain, confident], [], DEMO_ORIGIN);
   assert.equal(ranked[0].id, confident.id);
