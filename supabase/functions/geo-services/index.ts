@@ -34,7 +34,16 @@ Deno.serve(async (request) => {
   url.searchParams.set('key', key);
   try {
     const response = await fetch(url, {signal: AbortSignal.timeout(6000)});
+    if (!response.ok) {
+      console.error(JSON.stringify({event: 'geocode_provider_http_error', status: response.status}));
+      return json(request, {error: 'Address search is temporarily unavailable.'}, 502);
+    }
     const result = await response.json();
+    if (result.status === 'ZERO_RESULTS') return json(request, {point: null});
+    if (result.status !== 'OK') {
+      console.error(JSON.stringify({event: 'geocode_provider_error', status: result.status, message: result.error_message ?? 'unknown'}));
+      return json(request, {error: 'Address search is temporarily unavailable.'}, 502);
+    }
     const location = result.results?.[0]?.geometry?.location;
     if (!location) return json(request, {point: null});
     await db.from('geocode_cache').upsert({
