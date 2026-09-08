@@ -49,10 +49,13 @@ export function ExplorePage() {
       a.score - b.score,
     );
   }, [filters, sort, washes]);
-  const best = filtered.find((wash) => wash.estimate.operatingStatus === 'open');
-  const fastest = [...filtered].filter(isOpen).sort((a, b) => a.totalMinutes - b.totalMinutes)[0];
-  const cheapest = [...filtered].filter(isOpen).sort((a, b) => startingPrice(a) - startingPrice(b))[0];
-  const closest = [...filtered].filter(isOpen).sort((a, b) => a.distanceKm - b.distanceKm)[0];
+
+  const explicitlyOpen = filtered.filter(isOpen);
+  const recommendationPool = explicitlyOpen.length ? explicitlyOpen : filtered;
+  const best = recommendationPool[0];
+  const fastest = [...recommendationPool].sort((a, b) => a.totalMinutes - b.totalMinutes)[0];
+  const cheapest = [...recommendationPool].sort((a, b) => startingPrice(a) - startingPrice(b))[0];
+  const closest = [...recommendationPool].sort((a, b) => a.distanceKm - b.distanceKm)[0];
 
   useEffect(() => {
     if (!locationReady) {
