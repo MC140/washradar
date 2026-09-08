@@ -38,5 +38,7 @@ export const DEFAULT_FILTERS: WashFilters = {
   maximumPrice: 50,
   maximumDistanceKm: 25,
   queueUnderMinutes: null,
-  openNow: true,
+  // Google Places bootstrap does not yet populate reliable business hours for every wash.
+  // Defaulting this filter off prevents valid nearby washes with unknown hours from being hidden.
+  openNow: false,
 };
