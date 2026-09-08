@@ -1,0 +1,39 @@
+name: Bootstrap GTA catalogue once
+
+on:
+  push:
+    paths:
+      - '.github/workflows/bootstrap-gta-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Import GTA catalogue in resumable batches
+        run: |
+          set -euo pipefail
+          URL='https://mwyomijlvjfllgeniqcz.supabase.co/functions/v1/catalogue-bootstrap-run'
+          done_flag=false
+          for i in 1 2 3 4 5 6; do
+            echo "Bootstrap batch $i"
+            body=$(curl --silent --show-error "$URL")
+            echo "$body"
+            echo "$body" | grep -q '"upstreamStatus":200' || { echo 'Bootstrap upstream failed'; exit 1; }
+            if echo "$body" | grep -q '"done":true'; then
+              done_flag=true
+              break
+            fi
+            sleep 2
+          done
+          test "$done_flag" = true
+      - name: Remove one-time bootstrap workflow
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/bootstrap-gta-once.yml
+          git commit -m 'Complete one-time GTA catalogue bootstrap'
+          git push
