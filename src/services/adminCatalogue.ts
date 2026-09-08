@@ -1,4 +1,4 @@
-import {createClient} from '@supabase/supabase-js';
+import {createClient, type SupabaseClient} from '@supabase/supabase-js';
 import {appConfig} from '../config/env';
 import type {CatalogueImportProgress, CatalogueImportResult} from './repository';
 
@@ -66,7 +66,6 @@ export async function importFullGtaCatalogue(onProgress?: (progress: CatalogueIm
   let state = (stateResponse.data?.state ?? null) as ImportState | null;
   let startIndex = Math.min(Math.max(Number(state?.next_index ?? 0), 0), GTA_QUERIES.length);
 
-  // Once a previous full run is complete, a deliberate new click means start a fresh refresh.
   if (startIndex >= GTA_QUERIES.length && state?.completed_at) {
     await saveCheckpoint(client, {nextIndex: 0, total: GTA_QUERIES.length, lastArea: 'Starting full refresh', pageToken: null, pageNumber: 0, completed: false});
     startIndex = 0;
@@ -148,7 +147,6 @@ export async function importFullGtaCatalogue(onProgress?: (progress: CatalogueIm
     completed: true,
   });
 
-  // Re-fetch every saved Google Place ID once so records discovered before the hours-parser fix are repaired too.
   let offset = 0;
   let enrichedProcessed = 0;
   while (true) {
@@ -210,7 +208,7 @@ export async function importFullGtaCatalogue(onProgress?: (progress: CatalogueIm
   };
 }
 
-async function saveCheckpoint(client: ReturnType<typeof createClient>, input: {
+async function saveCheckpoint(client: SupabaseClient, input: {
   nextIndex: number;
   total: number;
   lastArea: string;
