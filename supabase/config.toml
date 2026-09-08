@@ -25,7 +25,9 @@ verify_jwt = true
 [functions.ad-events]
 verify_jwt = true
 [functions.geo-services]
-verify_jwt = true
+# Location search and route lookup are available before sign-in. The function
+# enforces CORS, per-device rate limits and provider quotas itself.
+verify_jwt = false
 [functions.admin]
 verify_jwt = true
 [functions.wash-ingest]
