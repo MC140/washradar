@@ -27,7 +27,24 @@ test('confidence rises with consistent verified evidence', () => {
   const one = estimateQueue(wash, [signal(wash.id, 'a', 5, 3)]);
   const three = estimateQueue(wash, [signal(wash.id, 'a', 5, 3), signal(wash.id, 'b', 6, 4), signal(wash.id, 'c', 5, 5)]);
   assert.ok(three.confidenceScore > one.confidenceScore);
+  assert.notEqual(one.dataState, 'LIVE');
   assert.equal(three.dataState, 'LIVE');
+});
+test('remote reports are accepted as weak evidence and cannot create LIVE alone', () => {
+  const wash = {...DEMO_WASHES[0], historicalWaitMinutes: 0, historicalSampleCount: 0};
+  const remote = estimateQueue(wash, [signal(wash.id, 'remote-a', 60, 2, {verification: 'remote', reputation: 100})]);
+  assert.notEqual(remote.dataState, 'LIVE');
+  assert.ok(remote.confidenceScore <= 32);
+});
+test('a remote outlier does not overpower agreeing nearby reports', () => {
+  const wash = {...DEMO_WASHES[0], historicalWaitMinutes: 0, historicalSampleCount: 0};
+  const estimate = estimateQueue(wash, [
+    signal(wash.id, 'near-a', 18, 2),
+    signal(wash.id, 'near-b', 20, 3),
+    signal(wash.id, 'remote-outlier', 80, 1, {verification: 'remote', reputation: 100}),
+  ]);
+  assert.ok(estimate.waitMinutes < 30);
+  assert.equal(estimate.dataState, 'LIVE');
 });
 test('operational closure needs consensus and is excluded from recommendations', () => {
   const wash = {...DEMO_WASHES[0], status: 'open'};
@@ -47,7 +64,7 @@ test('a farther wash with no queue can beat the closest congested wash', () => {
   assert.equal(ranked[0].id, farther.id);
 });
 test('low-confidence options receive an uncertainty penalty', () => {
-  const confident = {...DEMO_WASHES[0], historicalSampleCount: 30};
+  const confident = {...DEMO_WASHES[0], historicalWaitMinutes: 0, historicalSampleCount: 30};
   const uncertain = {...confident, id: DEMO_WASHES[1].id, historicalSampleCount: 0};
   const ranked = rankWashes([uncertain, confident], [], DEMO_ORIGIN);
   assert.equal(ranked[0].id, confident.id);
