@@ -29,6 +29,12 @@ export interface CatalogueImportProgress {
   discovered: number;
   imported: number;
   updated: number;
+  phase?: 'discovery' | 'enrichment' | 'coverage';
+  hoursRefreshed?: number;
+  typed?: number;
+  enrichedProcessed?: number;
+  uniqueFsaCount?: number;
+  sparseFsaCount?: number;
 }
 
 export interface CatalogueImportResult {
@@ -36,6 +42,12 @@ export interface CatalogueImportResult {
   imported: number;
   updated: number;
   areasCompleted: number;
+  hoursRefreshed?: number;
+  typed?: number;
+  enrichedProcessed?: number;
+  uniqueFsaCount?: number;
+  sparseFsaCount?: number;
+  unknownPostal?: number;
 }
 
 export interface WashRepository {
