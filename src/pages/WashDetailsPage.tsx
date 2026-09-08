@@ -1,4 +1,4 @@
-import {ArrowLeft, ArrowUpRight, Bell, Car, Check, Clock3, Droplets, MapPin, ShieldCheck, Star, TimerReset, TriangleAlert} from 'lucide-react';
+import {ArrowLeft, Bell, Car, Check, Clock3, Droplets, MapPin, Navigation, ShieldCheck, Star, TimerReset, TriangleAlert} from 'lucide-react';
 import {useEffect, useState} from 'react';
 import {Link, useParams} from 'react-router-dom';
 import {toast} from 'sonner';
@@ -57,6 +57,10 @@ export function WashDetailsPage() {
   const priceAge = latestPriceVerification === null ? null : Math.floor((Date.now() - latestPriceVerification) / 86_400_000);
   const status = statusPresentation(wash.estimate.operatingStatus);
   const queueStateLabel = queueKnown ? wash.estimate.dataState : 'LIMITED DATA';
+  const directions = () => {
+    analytics.track('directions_clicked', {washId: wash.id, from: 'details'});
+    window.open(directionsUrl(wash), '_blank', 'noopener,noreferrer');
+  };
 
   return (
     <>
@@ -71,6 +75,7 @@ export function WashDetailsPage() {
             <div className="status-line">
               <strong className={status.tone}>{status.label}</strong>
               {wash.rating !== null && <span><Star size={15} fill="currentColor" /> {wash.rating.toFixed(1)} ({wash.ratingCount})</span>}
+              <button className="quick-directions detail-quick-directions" onClick={directions}><Navigation size={13} /> Directions</button>
             </div>
             <div className="detail-wait">
               <div><small>CURRENT WAIT</small><strong>{queueMinutes === null ? '—' : (wash.estimate.dataState === 'ESTIMATED' ? '~' : '') + queueMinutes}{queueMinutes !== null && <span> min</span>}</strong><span>{queueMinutes === null ? 'Queue unknown' : 'Current queue estimate'}</span></div>
@@ -85,8 +90,7 @@ export function WashDetailsPage() {
             </div>
             {queueMinutes === null && <p className="disclaimer"><TriangleAlert size={14} /> Done-in time is withheld until WashRadar has queue evidence. Unknown wait is never treated as zero.</p>}
             <div className="detail-actions">
-              <button className="primary-button" onClick={() => {analytics.track('directions_clicked', {washId: wash.id, from: 'details'}); window.open(directionsUrl(wash), '_blank', 'noopener,noreferrer');}}><ArrowUpRight size={17} /> Directions</button>
-              <button className="secondary-button" onClick={() => setReportOpen(true)}>Report queue</button>
+              <button className="queue-update-button" onClick={() => setReportOpen(true)}>Update queue</button>
               <button className="secondary-button" disabled={Boolean(session)} onClick={() => setQueueOpen(true)}><TimerReset size={17} /> Join queue</button>
               <button className="secondary-button" onClick={() => setAlertOpen(true)}><Bell size={17} /> Alert me</button>
             </div>
@@ -119,7 +123,7 @@ export function WashDetailsPage() {
         <aside className="panel reports-panel">
           <p className="eyebrow">RECENT DRIVER REPORTS</p><h2>What drivers are seeing</h2><p>Nearby verified reports carry more weight. Exact device locations are never displayed.</p>
           {recent.length ? recent.map((signal) => <article className="report-row" key={signal.id}><span><Check size={16} /></span><div><strong>{reportLabels[signal.kind]}{signal.waitMinutes !== null ? ' · ' + signal.waitMinutes + ' min' : ''}</strong><p>{minutesAgo(signal.createdAt)} · {signal.verification === 'remote' ? 'Remote report' : signal.verification === 'session' ? 'Verified queue session' : 'Verified nearby'}</p></div></article>) : <div className="no-reports"><Clock3 size={25} /><strong>No recent driver reports</strong><p>{wash.historicalSampleCount > 0 ? 'A historical estimate may still be available.' : 'There is no queue estimate yet. A quick driver report helps everyone.'}</p></div>}
-          <button className="secondary-button full" onClick={() => setReportOpen(true)}>Share what you see</button>
+          <button className="queue-update-button full" onClick={() => setReportOpen(true)}>Update queue</button>
         </aside>
       </div>
       <ReportModal open={reportOpen} initialWash={wash} onClose={() => setReportOpen(false)} />
