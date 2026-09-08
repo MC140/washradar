@@ -13,7 +13,6 @@ import type {
   SortMode,
   WashFilters,
 } from '../domain/models';
-import {DEMO_ORIGIN} from '../data/demo';
 import {analytics, logger} from '../services/analytics';
 import {repository} from '../services';
 import {requestLocation} from '../services/location';
@@ -24,6 +23,7 @@ type State = {
   origin: Point;
   currentPosition?: Point;
   locationLabel: string;
+  locationReady: boolean;
   washes: RankedWash[];
   signals: QueueSignal[];
   loading: boolean;
@@ -53,6 +53,7 @@ type State = {
 
 const Context = createContext<State | null>(null);
 const initialMetrics = {reportsSubmitted: 0, completedWaits: 0, reputation: 50, streakDays: 0};
+const neutralOrigin: Point = {lat: 43.6532, lng: -79.3832};
 
 function storedFilters(): WashFilters {
   try {
@@ -64,9 +65,10 @@ function storedFilters(): WashFilters {
 }
 
 export function WashRadarProvider({children}: {children: ReactNode}) {
-  const [origin, setOrigin] = useState<Point>(DEMO_ORIGIN);
+  const [origin, setOrigin] = useState<Point>(neutralOrigin);
   const [currentPosition, setCurrentPosition] = useState<Point>();
-  const [locationLabel, setLocationLabel] = useState('Mississauga, ON');
+  const [locationLabel, setLocationLabel] = useState('Set location');
+  const [locationReady, setLocationReady] = useState(false);
   const [washes, setWashes] = useState<RankedWash[]>([]);
   const [signals, setSignals] = useState<QueueSignal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -84,6 +86,26 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
   const refresh = useCallback(async () => {
     const version = ++refreshVersion.current;
     try {
+      if (!locationReady) {
+        const [favouriteIds, savedAlerts, activeSession, authState, contributionMetrics] = await Promise.all([
+          repository.getFavouriteIds(),
+          repository.getAlerts(),
+          repository.getActiveQueueSession(),
+          repository.authState(),
+          repository.metrics(),
+        ]);
+        if (version !== refreshVersion.current) return;
+        setWashes([]);
+        setSignals([]);
+        setFavourites(favouriteIds);
+        setAlerts(savedAlerts);
+        setSession(activeSession);
+        setAuth(authState);
+        setMetrics(contributionMetrics);
+        setError('');
+        return;
+      }
+
       const [{washes: rawWashes, signals}, favouriteIds, savedAlerts, activeSession, authState, contributionMetrics] = await Promise.all([
         repository.loadWashes(origin, Math.max(filters.maximumDistanceKm, 25)),
         repository.getFavouriteIds(),
@@ -112,7 +134,7 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
     } finally {
       if (version === refreshVersion.current) setLoading(false);
     }
-  }, [filters.maximumDistanceKm, filters.types, origin]);
+  }, [filters.maximumDistanceKm, filters.types, locationReady, origin]);
 
   useEffect(() => {
     analytics.track('app_opened', {mode: repository.mode});
@@ -167,10 +189,13 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
       setCurrentPosition(result.point);
       setOrigin(result.point);
       setLocationLabel('Current location');
+      setLocationReady(true);
+      setLoading(true);
       analytics.track('location_granted', {accuracyBand: result.accuracy <= 100 ? 'good' : 'coarse'});
       toast.success('Nearby washes updated.');
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Location is unavailable.';
+      setLocationLabel('Set location');
       toast.info(message);
     }
   }, []);
@@ -181,6 +206,8 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
     if (!point) return false;
     setOrigin(point);
     setLocationLabel(query.trim());
+    setLocationReady(true);
+    setLoading(true);
     return true;
   }, []);
 
@@ -238,6 +265,7 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
     origin,
     currentPosition,
     locationLabel,
+    locationReady,
     washes,
     signals,
     loading,
@@ -263,7 +291,7 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
     removeAlert,
     signIn,
     signOut,
-  }), [origin, currentPosition, locationLabel, washes, signals, loading, error, offline, favourites, alerts, session, metrics, filters, sort, auth, refresh, locate, search, setFilters, toggleFavourite, submitReport, startSession, finishSession, createAlert, removeAlert, signIn, signOut]);
+  }), [origin, currentPosition, locationLabel, locationReady, washes, signals, loading, error, offline, favourites, alerts, session, metrics, filters, sort, auth, refresh, locate, search, setFilters, toggleFavourite, submitReport, startSession, finishSession, createAlert, removeAlert, signIn, signOut]);
 
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
