@@ -1,4 +1,4 @@
-import {useMemo, useState} from 'react';
+import {useEffect, useMemo, useState} from 'react';
 import {MapPin, ShieldCheck} from 'lucide-react';
 import type {QueueBucket, QueueSignal, RankedWash} from '../domain/models';
 import {useWashRadar} from '../state/WashRadarContext';
@@ -27,6 +27,13 @@ export function ReportModal({open, initialWash, onClose}: {open: boolean; initia
   const [busy, setBusy] = useState(false);
   const [complete, setComplete] = useState('');
   const wash = useMemo(() => washes.find((item) => item.id === washId), [washId, washes]);
+
+  useEffect(() => {
+    if (!open || !initialWash) return;
+    setWashId(initialWash.id);
+    setComplete('');
+    analytics.track('queue_report_started', {washId: initialWash.id});
+  }, [open, initialWash?.id]);
 
   const send = async (kind: QueueSignal['kind'], queueBucket?: QueueBucket) => {
     if (!wash) return;
