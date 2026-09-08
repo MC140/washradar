@@ -79,19 +79,21 @@ export function estimateQueue(wash: CarWash, signals: QueueSignal[], now = new D
     : 0;
   let weightedWait = wash.historicalWaitMinutes * historicalWeight;
   let totalWeight = historicalWeight;
-  let disagreementSum = 0;
-  let disagreementWeight = 0;
 
   for (const item of weightedInputs) {
     const weight = item.baseWeight * agreementFactor(item.wait, consensus);
     weightedWait += item.wait * weight;
     totalWeight += weight;
-    disagreementSum += Math.abs(item.wait - consensus) * item.baseWeight;
-    disagreementWeight += item.baseWeight;
   }
 
   const waitMinutes = totalWeight > 0 ? Math.max(0, Math.round(weightedWait / totalWeight)) : 0;
-  const disagreement = disagreementWeight > 0 ? disagreementSum / disagreementWeight : 0;
+  const strongAgreementInputs = weightedInputs.filter((item) => item.signal.verification !== 'remote');
+  const agreementInputs = strongAgreementInputs.length ? strongAgreementInputs : weightedInputs;
+  const agreementConsensus = weightedMedian(agreementInputs.map((item) => ({wait: item.wait, weight: item.baseWeight})));
+  const disagreementWeight = agreementInputs.reduce((sum, item) => sum + item.baseWeight, 0);
+  const disagreement = disagreementWeight > 0
+    ? agreementInputs.reduce((sum, item) => sum + Math.abs(item.wait - agreementConsensus) * item.baseWeight, 0) / disagreementWeight
+    : 0;
   const newest = weightedInputs.reduce<Date | null>((latest, item) => {
     const date = new Date(item.signal.createdAt);
     return !latest || date > latest ? date : latest;
