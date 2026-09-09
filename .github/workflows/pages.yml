@@ -25,10 +25,10 @@ jobs:
         run: |
           mkdir -p .cache/postal
           curl --fail --location --retry 4 --retry-delay 3 --connect-timeout 20 \
-            --output .cache/postal/CA.zip \
-            https://download.geonames.org/export/zip/CA.zip
+            --output .cache/postal/CA_full.csv.zip \
+            https://download.geonames.org/export/zip/CA_full.csv.zip
           python3 scripts/build_gta_postal_index.py \
-            --zip .cache/postal/CA.zip \
+            --zip .cache/postal/CA_full.csv.zip \
             --output public/postal-index.json
           python3 - <<'PY'
           import json
