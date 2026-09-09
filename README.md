@@ -29,75 +29,55 @@ Do not restart old/superseded work merely because it appears in historical notes
 
 # Current production baseline — 2026-09-09
 
-Production includes feature work through **PR #32**.
+Production includes feature work through **PR #39**.
 
-## Latest account release — PR #32
+## Friends-beta account model
 
-**PR #32 — `Add password and social account model`** replaced magic-link-only login with the intended consumer account model:
+The current friends-beta auth surface is intentionally simple:
 
-- browsing and basic contribution remain guest-first;
-- email + password is the normal email login;
-- normal password logins send **no email**;
-- new email/password accounts use a one-time verification email when confirmations are enabled;
-- existing magic-link-only users can use **Forgot / create password** once, then use password login thereafter;
-- Google and Apple OAuth are implemented and their buttons appear only when the provider is actually enabled in Supabase;
-- the shared Supabase session remains persistent across routes and refreshes until sign-out/session invalidation;
-- `/auth/confirm` now handles signup verification, OAuth return and password recovery;
-- PWA shell cache is `washradar-shell-v6` so installed mobile clients receive the new account UI;
-- anonymous contribution history can be safely attached to an existing permanent account through a short-lived claim flow.
+- browsing and basic queue contributions remain guest-first;
+- email + password is the visible account method;
+- minimum password length is **8 characters**;
+- no forced upper/lower/number/symbol composition rule;
+- no duplicate confirmation-password field;
+- password-manager/iCloud Keychain/browser-generated passwords are supported;
+- Supabase **Confirm email is OFF** for the friends beta, so new accounts can be created and signed in immediately without waiting for email;
+- Google OAuth remains configured in the backend but its button is **hidden** in the friends-beta UI;
+- Apple sign-in is not exposed;
+- signed-in users have **Set / change password** in Profile and can update their password without email;
+- forgot-password email recovery is intentionally hidden until reliable public SMTP is configured;
+- the shared Supabase session persists across routes/refreshes until sign-out/session invalidation;
+- guest contribution history can be securely merged into a permanent account through the claim flow.
 
 ### Anonymous → permanent account continuity
 
-When a guest contributor signs into an existing permanent account, WashRadar can transfer:
+When a guest contributor signs into an existing permanent account, WashRadar can transfer queue reports, wash-type reports, queue-session history and visible contribution counters.
 
-- queue reports;
-- wash-type reports;
-- queue-session history;
-- visible contribution counters.
+It intentionally does **not** transfer anonymous Radar Points, anonymous reputation/trust score, or an active queue timer. Merge claims are device-held and valid for **24 hours**.
 
-It intentionally does **not** transfer:
+### Remaining account work before broad public launch
 
-- anonymous Radar Points;
-- anonymous reputation/trust score;
-- an active queue timer.
+1. Configure **custom SMTP** for reliable password-reset/recovery and, if desired later, email verification.
+2. Enable Supabase **Leaked Password Protection** when the project plan supports it.
+3. Decide whether to expose Google sign-in publicly; backend Google OAuth is configured but currently hidden from the beta UI.
+4. Add CAPTCHA/Turnstile if signup or anonymous-auth abuse becomes material.
 
-This preserves useful history without allowing disposable anonymous identities to farm rewards/trust and merge them into a permanent account. Merge claims are random, device-held and now valid for **24 hours** so delayed verification/recovery email does not unnecessarily lose guest history.
-
-See `docs/AUTH.md` for the full account/security model.
-
-### Remaining account launch configuration
-
-Before broad public promotion:
-
-1. Configure **custom SMTP** (for example Resend) for reliable signup verification/password recovery.
-2. Enable Supabase **Leaked Password Protection**.
-3. Configure Google and/or Apple provider credentials if those buttons are desired in production.
-4. Consider CAPTCHA/Turnstile as signup/anonymous-auth abuse becomes material.
-
-Google/Apple support existing in code does **not** mean provider credentials are already configured.
+Do not re-enable password-reset UI until email delivery is reliable.
 
 ---
 
-# Scale baseline — PR #30 / #31
+# Recent release hardening — PRs #33–#39
 
-**PR #30 — `Prepare WashRadar for Supabase scale`** removed the largest client fan-out risk before traffic grows.
+- **PR #33** extended anonymous-account merge claims to 24 hours.
+- **PR #35** fixed cold-start/shared wash detail loading, hardened a privileged wash-type RPC, restored Saved/queue-target state on reload, clarified in-app-only queue targets, and hardened friends-beta auth behavior.
+- **PR #36** simplified signup to 8+ character passwords, removed the second password field, and improved password-manager compatibility.
+- **PR #37** aligned the production audit with the simplified signup flow.
+- **PR #38** temporarily exposed Google sign-in for recovery of an existing linked account and added signed-in password change.
+- **PR #39** hid Google again after recovery while keeping signed-in password change available.
 
-Production behavior:
+Current production validation includes green deterministic queue/trust tests, desktop/mobile live-user journeys, post-deploy production audit, and a synthetic transactional challenge lifecycle audit that was rolled back after testing.
 
-- queue freshness defaults to **visible-tab adaptive polling**, not one global Realtime socket per browser;
-- a queue refresh fetches only `queue_signal_feed` for washes already on screen;
-- default poll interval is ~20 seconds plus per-session jitter;
-- hidden tabs do not poll;
-- Realtime remains available through `VITE_QUEUE_REFRESH_MODE=realtime` without a rewrite;
-- history/freshness indexes exist for queue reports, wash-type reports and Radar Points;
-- `.github/workflows/scale-smoke.yml` + `scripts/scale_smoke.mjs` provide a read-only production capacity smoke;
-- `docs/SCALING.md` documents Free → Pro, compute resizing, observability and incident handling.
-
-The first production scale smoke on Supabase Free ran at **20 concurrent / 200 reads** with **0 failures**, p50 ~640 ms, p95 ~1.93 s and p99 ~2.00 s. Treat that as an early baseline, not a maximum-capacity claim.
-
-**PR #31** refreshed the scale handoff and added a controlled trigger for that production smoke workflow.
-
-The goal is for growth to require **capacity/configuration changes, not a backend migration**.
+The challenge audit covered remote-vs-nearby qualification, distinct-wash counting, verified waits, wash-type confirmation, three-day progress, disabled contributions, one-time rewards, daily point caps, post-completion anti-farming and cross-user isolation.
 
 ---
 
@@ -128,15 +108,16 @@ GitHub Pages (React + Vite PWA)
         +-- Supabase Auth
         |     +-- guest/anonymous identity
         |     +-- email + password
-        |     +-- optional Google / Apple OAuth
-        |     +-- verification / recovery email
+        |     +-- Google OAuth configured but hidden in beta UI
+        |     +-- signed-in password change
+        |     +-- email recovery deferred until SMTP
         |
         +-- Supabase Data API / RLS
         |     +-- canonical washes / hours / types
         |     +-- queue reports / estimates
         |     +-- profiles / user vehicles
         |     +-- challenges / progress / points ledger
-        |     +-- favourites / alerts
+        |     +-- favourites / queue targets
         |
         +-- queue freshness
         |     +-- DEFAULT: visible-tab polling of queue_signal_feed
@@ -145,6 +126,7 @@ GitHub Pages (React + Vite PWA)
         +-- Supabase DB triggers / RPCs
         |     +-- nearby spatial lookup
         |     +-- queue signal feed
+        |     +-- direct wash-detail lookup
         |     +-- contribution rewards
         |     +-- challenge progress
         |     +-- account/anonymous-history helpers
@@ -158,7 +140,6 @@ GitHub Pages (React + Vite PWA)
               +-- protected admin/moderation
 
 Directions --> Google Maps / Apple Maps on the user's device
-              (live traffic/ETA handled outside WashRadar)
 ```
 
 Main folders:
@@ -169,49 +150,15 @@ Main folders:
 - `supabase/migrations` — schema/RLS/indexes/RPCs/triggers.
 - `supabase/functions` — privileged actions/enrichment.
 - `scripts` — static index generators and scale-smoke script.
-- `.github/workflows` — CI, Pages deployment and production scale smoke.
+- `.github/workflows` — CI, Pages deployment, post-deploy live audit and production scale smoke.
+- `release-tests` — production Playwright user journeys.
 - `docs/AUTH.md` — account/auth security model.
 - `docs/SCALING.md` — capacity/upgrade runbook.
-- `tests`, `e2e` — automated coverage.
+- `tests`, `e2e` — deterministic and browser coverage.
 
 ---
 
-# Supabase scaling posture
-
-WashRadar is intentionally staying on Supabase.
-
-Current production DB is small (roughly tens of MB, with ~889 wash locations). The near-term scaling concern is request/connection behavior rather than storage.
-
-Production-safe queue mode:
-
-```env
-VITE_QUEUE_REFRESH_MODE=poll
-VITE_QUEUE_POLL_MS=20000
-```
-
-Optional Realtime mode:
-
-```env
-VITE_QUEUE_REFRESH_MODE=realtime
-```
-
-Do not turn global Realtime back on merely because it feels more "live". Measure connection/message fan-out first.
-
-Important indexes include geographic GiST lookup, queue freshness/expiry, queue user history/user-wash, wash-type user history, Radar Points user/category/date, favourites and alerts.
-
-Scaling path:
-
-- **Free → Pro:** billing/capacity change; no WashRadar backend rewrite should be required.
-- **Compute resize:** separate operation that can restart the database; do it proactively in a low-traffic window and rerun the production smoke afterward.
-- For stricter availability later, evaluate paid replica/high-availability options before major maintenance.
-
-See `docs/SCALING.md`.
-
----
-
-# Contributor / community architecture
-
-## Queue trust
+# Queue trust and timing
 
 General evidence ordering:
 
@@ -220,9 +167,15 @@ General evidence ordering:
 3. older/less precise nearby report;
 4. remote report.
 
-Freshness decays from strongest in the first minutes to no live influence after roughly an hour. Reports combine proximity, freshness, reputation and agreement/outlier penalties. Only the latest active signal from a contributor should materially influence a wash.
+Remote evidence is deliberately weak and cannot by itself create a strong `LIVE` queue state. Rapid duplicates and excessive reporting are rate-limited/deduplicated server-side.
 
-## Radar Points
+Queue buckets are `NO QUEUE`, `1–3`, `4–7`, `8–12`, and `12+`. The backend maps each bucket to a representative car count and combines it with the wash's minutes-per-car model. It does **not** fake a continuously decreasing car count after a report. Evidence freshness decays over time and old evidence expires.
+
+Open clients typically receive another user's accepted queue update within roughly **20 seconds plus jitter**; the submitting client refreshes immediately after a successful write.
+
+---
+
+# Radar Points and Challenges
 
 Radar Points are a retention/reward system, **not** a trust score.
 
@@ -233,17 +186,9 @@ Radar Points are a retention/reward system, **not** a trust score.
 | Nearby wash-type confirmation | 15 |
 | Remote report | 0 |
 
-Base contribution points are capped at 200/day. Challenge bonuses are one-time/idempotent.
+Base contribution points are capped at **200/day**. Challenge bonuses are one-time/idempotent.
 
-Levels:
-
-- Level 1 — **New Scout** — 0+
-- Level 2 — **Queue Scout** — 250+
-- Level 3 — **Radar Regular** — 750+
-- Level 4 — **Local Expert** — 1,500+
-- Level 5 — **WashRadar Hero** — 3,000+
-
-## Challenges
+Challenges:
 
 - **First Radar** — first nearby queue update — +100.
 - **Queue Scout** — update 3 different nearby washes — +250.
@@ -252,25 +197,26 @@ Levels:
 - **3-Day Contributor** — contribute on 3 different days — +300.
 - **Local Hero** — help update 5 different nearby washes — +750.
 
-Challenge progress is derived server-side from contribution history.
+Challenge progress is derived server-side from contribution history and rewards cannot be repeatedly farmed after completion.
 
-## Profile / My Cars
+---
 
-Signed-in users can have display name, handle, optional bio, Radar Points/level, contribution stats/history, saved washes, alerts and a private My Cars garage.
+# Scale posture
 
-`user_vehicles` is RLS-protected and supports year, make, model, optional nickname, optional 17-character VIN and one primary vehicle.
+Production queue freshness defaults to visible-tab adaptive polling. Default interval is about 20 seconds plus jitter; hidden tabs do not poll. Realtime remains optional through `VITE_QUEUE_REFRESH_MODE=realtime`.
 
-Do not invent vehicle/wash compatibility until reliable restriction/source data exists.
+The first production scale smoke on Supabase Free ran at **20 concurrent / 200 reads** with **0 failures**, p50 ~640 ms, p95 ~1.93 s and p99 ~2.00 s. Treat that as an early baseline, not a maximum-capacity claim.
+
+Free → Pro should remain a capacity/billing change rather than an application rewrite.
 
 ---
 
 # Cost architecture
 
-Normal use:
+Normal browsing is designed to avoid paid Google routing traffic:
 
 - GPS — browser/phone geolocation — $0 to WashRadar.
 - Distance — local calculation — $0.
-- Wash catalogue — canonical Supabase records; no per-user Places discovery.
 - Queue — dynamic Supabase data.
 - Postal/FSA search — static generated index — $0/search.
 - Street/house autocomplete — static partitioned open-address files — $0/search.
@@ -279,133 +225,60 @@ Normal use:
 - Google Places — administrative catalogue maintenance/enrichment only.
 - Google Geocoding — exceptional fallback.
 - Password login — no email send.
-- Signup/recovery — email only when needed; custom SMTP pending before broad launch.
-
-Do not reintroduce automatic Google traffic-route calls without an explicit product decision.
-
----
-
-# Search / address architecture
-
-PR #21 uses the full Canadian postal dataset and validates GTA coverage such as `M1X`. PR #22 fixed stale mobile/PWA postal caching.
-
-Street/house autocomplete uses **static partitioned files**, not millions of household addresses in primary Supabase. The ODA-derived deployment contains roughly 1.56M GTA address points in chunks. Keep one useful routing point per building where possible rather than duplicating every unit.
+- Friends-beta signup — no email confirmation while Confirm email is OFF.
+- Forgot-password recovery — deferred until public SMTP is configured.
 
 ---
 
-# Current infrastructure / catalogue
+# Current infrastructure
 
 - Frontend: React + Vite + TypeScript PWA.
 - Hosting: GitHub Pages.
 - Primary domain: `washradar.ca`.
 - Backend: Supabase PostgreSQL, Auth, Data API, optional Realtime and Edge Functions.
-- Supabase project: `mwyomijlvjfllgeniqcz`.
 - Map display: open tile-map path.
-- Approximate catalogue: ~889 saved wash locations, most with real weekly hours; GTA-first with useful spillover.
+- Approximate catalogue: ~889 saved wash locations, GTA-first with useful spillover.
 
-Active Edge Functions:
-
-- `ad-events`
-- `admin`
-- `analytics-events`
-- `geo-services`
-- `queue-actions`
-- `wash-ingest`
-- `wash-type-actions`
-
-Prefer selective catalogue enrichment over casual full paid Google enrichment.
-
----
-
-# Wash-type trust model
-
-Google's generic `car_wash` type does not reliably identify touchless, soft-cloth, tunnel, self-serve or hand wash.
-
-WashRadar combines business-name wording, official website, other credible evidence where needed, contributor reports, proximity, reputation and independent agreement. Publish a wash type only when confidence crosses the configured threshold.
-
----
-
-# User-facing timing model
-
-Do **not** promise `drive + queue + wash = done in` while paid traffic routing is disabled.
-
-Prefer:
-
-- **Distance:** `2.8 km away`
-- **Queue:** `~8 min`
-- **Wash:** `~6 min`
-- **Directions:** user's navigation app for live traffic/ETA
-
----
-
-# Ads foundation
-
-The schema supports advertiser businesses, campaigns, creatives, placements, geo/radius targeting, dates, priority, caps, budgets and impression/click tracking.
-
-There are currently no live production advertisers/campaigns. `/ad-preview` exists for fictional testing. Paid/sponsored activity must never alter organic queue trust or recommendation scoring.
+Active Edge Functions: `ad-events`, `admin`, `analytics-events`, `geo-services`, `queue-actions`, `wash-ingest`, `wash-type-actions`.
 
 ---
 
 # Near-term priorities
 
-1. Configure custom SMTP and verify branded signup/recovery delivery.
-2. Enable Supabase leaked-password protection.
-3. Physically validate email/password signup, existing-account password creation, persistent session and account drawer on iPhone/Android.
-4. Configure/test Google and Apple OAuth only after provider credentials are available.
-5. Validate Challenges/Radar Points and My Cars with real signed-in usage.
-6. Continue representative GTA postal/FSA/street search and `Use my location` validation.
-7. Test the complete `Update queue` + `I'm in line` loop with two independent sessions.
-8. Run Production scale smoke before launch and after Supabase plan/compute changes.
-9. Monitor Supabase and scale around ~70–80% sustained capacity rather than waiting for hard limits.
+1. Keep the friends beta on email/password while collecting real-user feedback.
+2. Configure custom SMTP before enabling forgot-password recovery for arbitrary users.
+3. Enable leaked-password protection if/when the Supabase plan supports it.
+4. Physically test new-account creation, logout/login, profile persistence, Saved, queue targets, Challenges, My Cars and contribution history on multiple real phones.
+5. Continue representative GTA postal/FSA/street search and `Use my location` validation.
+6. Test the complete `Update queue` + `I'm in line` loop with multiple independent real sessions at an actual wash.
+7. Keep Google hidden until there is an explicit decision to make it public.
+8. Run production scale smoke before a larger public launch and after Supabase plan/compute changes.
 
 ---
 
-# Complete pull-request history
+# Pull-request history
 
-**Merged** means the PR entered `main`. **Closed / superseded** means it did not.
-
-| PR | Status | Change | Current meaning |
-| --- | --- | --- | --- |
-| #1 — Clarify card timing and add quick queue reporting | Merged | Split timing concepts, fixed unknown queue display, added quick reporting. | Timing/report UX foundation. |
-| #2 — Fix queue report submission | Merged | Added proximity position and failure states; repaired backend privileges. | Location-aware queue submission. |
-| #3 — Add low-friction queue trust scoring | Merged | Proximity/freshness weighting, remote caps, consensus, dedupe and verified-session influence. | Core queue trust. |
-| #4 — Configure WashRadar custom domain | Merged | Added `washradar.ca` Pages/CORS/auth groundwork. | Production domain. |
-| #5 — Fix trust and accuracy gaps | Merged | Removed invented hours/false zero queues; improved GPS/unknown handling. | Unknown stays unknown. |
-| #6 — Repair GTA catalogue enrichment and resume imports | Merged | Fixed hours parser and resumable GTA ingestion. | GTA catalogue foundation. |
-| #7 — Add confidence-scored wash type truth engine | Merged | Multi-source type evidence/confidence. | Type truth model. |
-| #8 — Repair wash-type enrichment and simplify card actions | Merged | Repaired enrichment; visible `Update queue`. | Contributor CTA pattern. |
-| #9 — Make wash-type filters reflect verified nearby data | Merged | Verified nearby counts. | Trusted filters. |
-| #10 — Add interactive ad placement preview | Merged | `/ad-preview`. | Ads testing foundation. |
-| #11 — Zero-cost routing and local address index foundation | Merged | Removed automatic Routes; local address groundwork. | Zero-cost browsing start. |
-| #12 — Zero-cost routing and GTA address-search foundation | Merged | Distance/queue/wash + external Maps. | Current routing philosophy. |
-| #13 — Add zero-cost GTA address autocomplete | Merged | First NAR implementation; build issue. | Historical/superseded. |
-| #14 — Fix zero-cost GTA address index build | Merged | Switched practical path to Ontario ODA. | Static address foundation. |
-| #15 — Fix free GTA address index deployment | Closed / superseded | In-flight fix after main advanced. | Superseded by #16. |
-| #16 — Finalize reliable zero-cost GTA address autocomplete | Merged | ODA chunks + fallback privacy/cost. | Current street architecture. |
-| #17 — Fix NAR address index generation | Closed / superseded | Experimental NAR join. | Not current. |
-| #18 — Reduce ongoing Supabase usage | Merged | Coalesced Realtime, hidden-tab work, batching. | Runtime-cost optimization. |
-| #19 — Fix unified city, postal code and address search | Merged | Unified search + explicit Search button. | Current search UX. |
-| #20 — Fix GTA postal-code search reliably | Merged | Separate postal path with incomplete source. | Source superseded. |
-| #21 — Use full Canada postal dataset for GTA FSA search | Merged | Full Canadian postal data + validation. | Current postal source. |
-| #22 — Prevent stale postal search on iPhone/PWA | Merged | Revalidation + SW cache bump. | Postal cache behavior. |
-| #23 — Refresh README to current production state | Merged | Replaced stale handoff. | Source-of-truth workflow. |
-| #24 — Document complete pull-request history | Merged | Added ledger. | Project archaeology. |
-| #25 — Add contributor profiles, Radar Challenges and My Cars | Merged | Profile v2, points/challenges, vehicles, security. | Community foundation. |
-| #26 — Document community release state | Merged | Community handoff. | Docs milestone. |
-| #27 — Persist shared account session and add global profile drawer | Merged | Shared auth identity, persistent session, drawer. | Account/navigation architecture. |
-| #28 — Show account drawer trigger on mobile | Merged | Responsive account control + cache bump. | Mobile account access. |
-| #29 — Prevent auth email rate-limit bursts | Merged | One mail operation/tap, cooldowns, friendly 429. | Mail burst protection. |
-| #30 — Prepare WashRadar for Supabase scale | Merged | Adaptive queue polling, scale indexes, load smoke/runbook. | Scale architecture. |
-| #31 — Refresh scale handoff and add controlled smoke trigger | Merged | Current scale docs + controlled production smoke trigger. | Operational capacity baseline. |
-| #32 — Add password and social account model | Merged | Guest-first + email/password + optional Google/Apple + recovery/verification callback + secure guest-history merge. | Current account model. |
+| PR | Status | Current meaning |
+| --- | --- | --- |
+| #1–#12 | Merged | Core timing, queue reporting/trust, domain, catalogue, wash-type truth and zero-cost routing foundations |
+| #13–#17 | Mixed | Address-index iterations; current implementation is ODA-based |
+| #18–#22 | Merged | Supabase runtime optimization and current unified postal/address search |
+| #23–#24 | Merged | README/handoff and PR history documentation |
+| #25–#29 | Merged | Profiles, Radar Points/Challenges, My Cars, persistent auth/drawer and email burst protection |
+| #30–#31 | Merged | Scale architecture, smoke testing and runbook |
+| #32 | Merged | Password/social account foundation |
+| #33 | Merged | 24-hour anonymous merge claim |
+| #35 | Merged | Friends-beta release hardening |
+| #36 | Merged | 8-character/password-manager-friendly signup |
+| #37 | Merged | Production audit aligned with simplified signup |
+| #38 | Merged | Temporary Google recovery + signed-in password change |
+| #39 | Merged | Google hidden again; current friends-beta auth surface |
 
 ## Superseded paths to avoid restarting
 
-- PR #15 — superseded by #16.
-- PR #17 — experimental NAR repair; street index is ODA-based.
-- PR #13's failed NAR deployment — historical only.
-- PR #20's incomplete postal source — superseded by #21.
-- Global always-on queue Realtime as default — superseded by #30 polling; Realtime remains optional.
-- Magic-link-only login as normal account UX — superseded by #32 password/social model.
+- Global always-on queue Realtime as default — superseded by adaptive polling.
+- Magic-link-only login as normal account UX — superseded by password auth.
+- 12-character forced-composition signup — superseded by the 8-character beta model.
+- Public Google button during the friends beta — temporary recovery only; hidden again after PR #39.
 
 Always start from `main`, inspect newest merged PRs, verify the latest Pages workflow, and read the relevant auth/scaling runbook before changing those systems.
