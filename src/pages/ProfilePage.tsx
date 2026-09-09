@@ -5,11 +5,12 @@ import {Link} from 'react-router-dom';
 import {toast} from 'sonner';
 import {contributorLevel, initials} from '../domain/community';
 import {getCommunityDashboard, saveCommunityProfile, type CommunityDashboard} from '../services/community';
+import {beginCommunitySignIn} from '../services/communityAuth';
 import {useWashRadar} from '../state/WashRadarContext';
 import '../community.css';
 
 export function ProfilePage() {
-  const {auth, metrics, signIn, signOut, mode} = useWashRadar();
+  const {auth, metrics, signOut, mode} = useWashRadar();
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
   const [dashboard, setDashboard] = useState<CommunityDashboard | null>(null);
@@ -42,7 +43,7 @@ export function ProfilePage() {
   };
 
   if (!auth.signedIn) return <section className="profile-layout"><div className="panel profile-main"><span className="profile-icon"><User size={25} /></span><p className="eyebrow">YOUR WASHRADAR</p><h1>Build a contributor identity.</h1><p>Explore without an account. Sign in when you want a profile, Radar Points, challenge progress, vehicles, saved washes and contribution history across devices.</p>
-    <form className="magic-link-form" onSubmit={async (event) => {event.preventDefault(); setBusy(true); try {await signIn(email); toast.success('Check your email for a secure sign-in link.');} catch (error) {toast.error(error instanceof Error ? error.message : 'Sign-in is unavailable.');} finally {setBusy(false);}}}><label>Email address<input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></label><button className="primary-button" disabled={busy}>Email me a sign-in link</button></form>
+    <form className="magic-link-form" onSubmit={async (event) => {event.preventDefault(); setBusy(true); try {const result = await beginCommunitySignIn(email); toast.success(result.preservesContributorId ? 'Check your email to keep this contributor history with your account.' : 'Check your email for a secure sign-in link.');} catch (error) {toast.error(error instanceof Error ? error.message : 'Sign-in is unavailable.');} finally {setBusy(false);}}}><label>Email address<input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></label><button className="primary-button" disabled={busy}>Email me a sign-in link</button></form>
     {mode === 'demo' && <p className="demo-auth-note">Email is intentionally disabled in demo mode. Connect the production Supabase project to enable magic links.</p>}
     <div className="profile-signin-benefits"><span><Trophy /> Challenges & Radar Points</span><span><CarFront /> Private My Cars garage</span><span><BarChart3 /> Contribution history</span></div>
   </div><aside><div className="panel privacy-panel"><ShieldCheck /><h2>Low friction, private by design.</h2><p>WashRadar stores proximity verification for trust, not a public location trail. Your saved vehicles and profile account data stay private to your account.</p></div></aside></section>;
