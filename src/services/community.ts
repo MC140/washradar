@@ -89,8 +89,10 @@ export async function getCommunityDashboard(): Promise<CommunityDashboard> {
     };
   }
 
-  const [profileResult, ledgerResult, progressResult, vehiclesResult, queueResult, typeResult] = await Promise.all([
+  await client.rpc('refresh_my_challenges');
+  const [profileResult, pointsResult, ledgerResult, progressResult, vehiclesResult, queueResult, typeResult] = await Promise.all([
     client.from('profiles').select('display_name,handle,avatar_url,bio').eq('id', user.id).maybeSingle(),
+    client.rpc('my_radar_points'),
     client.from('points_ledger').select('amount,source_type,source_key,description,created_at').eq('user_id', user.id).order('created_at', {ascending: false}).limit(200),
     client.from('challenge_progress').select('challenge_id,progress,completed_at').eq('user_id', user.id),
     client.from('user_vehicles').select('id,year,make,model,nickname,vin,is_primary').eq('user_id', user.id).order('is_primary', {ascending: false}).order('created_at'),
@@ -100,7 +102,7 @@ export async function getCommunityDashboard(): Promise<CommunityDashboard> {
 
   const profileRow = profileResult.data;
   const ledger = ledgerResult.data ?? [];
-  const points = ledger.reduce((sum, row) => sum + Number(row.amount ?? 0), 0);
+  const points = Number(pointsResult.data ?? 0);
   const progressByChallenge = new Map((progressResult.data ?? []).map((row) => [row.challenge_id, row]));
   const pointsBySource = new Map(ledger.map((row) => [`${row.source_type}:${row.source_key}`, Number(row.amount)]));
 
@@ -211,8 +213,6 @@ export async function removeVehicle(vehicleId: string) {
 export async function setPrimaryVehicle(vehicleId: string) {
   const user = await permanentUser();
   if (!user) throw new Error('Sign in to manage vehicles.');
-  const {error: clearError} = await client.from('user_vehicles').update({is_primary: false, updated_at: new Date().toISOString()}).eq('user_id', user.id).eq('is_primary', true);
-  if (clearError) throw new Error('Primary vehicle could not be changed.');
-  const {error} = await client.from('user_vehicles').update({is_primary: true, updated_at: new Date().toISOString()}).eq('id', vehicleId).eq('user_id', user.id);
+  const {error} = await client.rpc('set_primary_vehicle', {p_vehicle_id: vehicleId});
   if (error) throw new Error('Primary vehicle could not be changed.');
 }
