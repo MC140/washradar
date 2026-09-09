@@ -95,9 +95,9 @@ test('manual GTA street-address search returns production wash results', async (
   await expect(page.locator('.wash-card').first()).toBeVisible();
 });
 
-test('friends beta exposes email/password only and password-manager-friendly signup', async ({page}) => {
+test('temporary recovery flow exposes Google and keeps password-manager-friendly signup', async ({page}) => {
   await page.goto('/profile');
-  await expect(page.getByRole('button', {name: 'Continue with Google'})).toHaveCount(0);
+  await expect(page.getByRole('button', {name: 'Continue with Google'})).toBeVisible();
   await expect(page.getByRole('button', {name: 'Continue with Apple'})).toHaveCount(0);
   await expect(page.getByRole('tab', {name: 'Sign in'})).toBeVisible();
   await page.getByRole('tab', {name: 'Create account'}).click();
