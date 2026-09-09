@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Build a compact, static GTA address autocomplete index from Statistics Canada's NAR.
+"""Build a compact GTA address autocomplete index from Statistics Canada's ODA.
 
-The output is intended for GitHub Pages, not Supabase. We intentionally keep one
-record per physical building (LOC_GUID) and omit apartment/unit identifiers because
-all units in a building share the same routing origin. This keeps the index small
-while still letting a user find their building address without any paid geocoding.
+The deployed index lives on GitHub Pages, not in Supabase, so address lookups cost
+WashRadar $0 per request and do not consume Supabase database space. Apartment/unit
+rows are collapsed to one physical street address because routing only needs the
+building location.
 """
 
 from __future__ import annotations
@@ -13,7 +13,6 @@ import argparse
 import csv
 import io
 import json
-import os
 import re
 import sys
 import unicodedata
@@ -22,40 +21,18 @@ from collections import defaultdict
 from pathlib import Path
 
 GTA_CSD_NAMES = {
-    "toronto",
-    "mississauga",
-    "brampton",
-    "caledon",
-    "oakville",
-    "burlington",
-    "milton",
-    "halton hills",
-    "vaughan",
-    "richmond hill",
-    "markham",
-    "aurora",
-    "newmarket",
-    "east gwillimbury",
-    "georgina",
-    "king",
-    "whitchurch stouffville",
-    "pickering",
-    "ajax",
-    "whitby",
-    "oshawa",
-    "clarington",
-    "uxbridge",
-    "scugog",
-    "brock",
+    "toronto", "mississauga", "brampton", "caledon", "oakville", "burlington",
+    "milton", "halton hills", "vaughan", "richmond hill", "markham", "aurora",
+    "newmarket", "east gwillimbury", "georgina", "king", "whitchurch stouffville",
+    "pickering", "ajax", "whitby", "oshawa", "clarington", "uxbridge", "scugog", "brock",
 }
-
-SOURCE_NAME = "Statistics Canada National Address Register"
+SOURCE_NAME = "Statistics Canada Open Database of Addresses (Ontario)"
 
 
 def normalize(value: str) -> str:
     value = unicodedata.normalize("NFD", value or "")
     value = "".join(ch for ch in value if unicodedata.category(ch) != "Mn")
-    value = value.lower()
+    value = value.lower().replace("-", " ")
     value = re.sub(r"[^a-z0-9]+", " ", value)
     return re.sub(r"\s+", " ", value).strip()
 
@@ -77,10 +54,6 @@ def get(row: dict[str, str], *keys: str) -> str:
     return ""
 
 
-def canonical_city(value: str) -> str:
-    return normalize(value).replace("-", " ")
-
-
 def parse_float(value: str) -> float | None:
     try:
         parsed = float(value)
@@ -89,7 +62,7 @@ def parse_float(value: str) -> float | None:
     return parsed if parsed == parsed else None
 
 
-def detect_csv_stream(binary_stream: io.BufferedIOBase, name: str):
+def csv_reader(binary_stream: io.BufferedIOBase):
     text = io.TextIOWrapper(binary_stream, encoding="utf-8-sig", errors="replace", newline="")
     sample = text.read(8192)
     text.seek(0)
@@ -98,51 +71,29 @@ def detect_csv_stream(binary_stream: io.BufferedIOBase, name: str):
     except csv.Error:
         dialect = csv.excel
     reader = csv.DictReader(text, dialect=dialect)
-    if not reader.fieldnames:
-        return None, text
-    reader.fieldnames = [str(name).strip().upper() for name in reader.fieldnames]
+    if reader.fieldnames:
+        reader.fieldnames = [str(name).strip().upper() for name in reader.fieldnames]
     return reader, text
 
 
-def candidate_members(zf: zipfile.ZipFile):
-    for info in zf.infolist():
-        if info.is_dir():
-            continue
-        lower = info.filename.lower()
-        if lower.endswith((".csv", ".txt", ".zip")):
-            yield info
-
-
-def iter_rows_from_zip(zf: zipfile.ZipFile, depth: int = 0):
-    for info in candidate_members(zf):
-        lower = info.filename.lower()
-        if lower.endswith(".zip") and depth < 2:
-            with zf.open(info) as nested_file:
-                payload = nested_file.read()
-            try:
-                with zipfile.ZipFile(io.BytesIO(payload)) as nested:
-                    yield from iter_rows_from_zip(nested, depth + 1)
-            except zipfile.BadZipFile:
-                continue
-            continue
-
+def iter_oda_rows(zf: zipfile.ZipFile):
+    candidates = [item for item in zf.infolist() if not item.is_dir() and item.filename.lower().endswith(".csv")]
+    if not candidates:
+        raise RuntimeError("The Ontario ODA archive contained no CSV file.")
+    for info in candidates:
         with zf.open(info) as raw:
-            reader, text = detect_csv_stream(raw, info.filename)
-            if reader is None:
-                text.detach()
-                continue
+            reader, text = csv_reader(raw)
             fields = set(reader.fieldnames or [])
-            # Ignore documentation/lookup CSVs. A NAR address file must contain these.
-            if not ({"CIVIC_NO", "BG_LATITUDE", "BG_LONGITUDE"} <= fields):
+            required = {"LATITUDE", "LONGITUDE"}
+            if not required <= fields or not ({"STREET_NO", "FULL_ADDR"} & fields):
                 try:
                     text.detach()
                 except Exception:
                     pass
                 continue
-            print(f"Processing {info.filename} ...", flush=True)
+            print(f"Processing {info.filename} with {len(fields)} columns", flush=True)
             for source_row in reader:
-                row = {str(k).upper(): ("" if v is None else str(v)) for k, v in source_row.items()}
-                yield row
+                yield {str(k).upper(): ("" if v is None else str(v)) for k, v in source_row.items()}
             try:
                 text.detach()
             except Exception:
@@ -150,12 +101,11 @@ def iter_rows_from_zip(zf: zipfile.ZipFile, depth: int = 0):
 
 
 def build(args: argparse.Namespace) -> int:
-    zip_path = Path(args.zip)
+    archive = Path(args.zip)
     out_dir = Path(args.output)
     chunks_dir = out_dir / "chunks"
     out_dir.mkdir(parents=True, exist_ok=True)
     chunks_dir.mkdir(parents=True, exist_ok=True)
-
     for old in chunks_dir.glob("*.json"):
         old.unlink()
 
@@ -165,88 +115,71 @@ def build(args: argparse.Namespace) -> int:
         try:
             fallback_areas = json.loads(areas_path.read_text(encoding="utf-8")).get("areas", [])
         except Exception:
-            fallback_areas = []
+            pass
 
-    if not zip_path.exists() or zip_path.stat().st_size == 0:
-        raise FileNotFoundError(f"NAR archive not found: {zip_path}")
+    if not archive.exists() or archive.stat().st_size == 0:
+        raise FileNotFoundError(f"ODA archive not found: {archive}")
 
     csv.field_size_limit(min(sys.maxsize, 2_147_483_647))
-
     chunks: dict[str, list[list]] = defaultdict(list)
-    seen_locations: set[str] = set()
+    seen_addresses: set[str] = set()
     city_sums: dict[str, list[float]] = defaultdict(lambda: [0.0, 0.0, 0.0])
     fsa_sums: dict[str, list[float]] = defaultdict(lambda: [0.0, 0.0, 0.0])
-    accepted = 0
-    scanned = 0
+    scanned = accepted = 0
 
-    with zipfile.ZipFile(zip_path) as zf:
-        for row in iter_rows_from_zip(zf):
+    with zipfile.ZipFile(archive) as zf:
+        for row in iter_oda_rows(zf):
             scanned += 1
-            if scanned % 500_000 == 0:
-                print(f"Scanned {scanned:,}; accepted {accepted:,}", flush=True)
+            if scanned % 250_000 == 0:
+                print(f"Scanned {scanned:,}; GTA building addresses {accepted:,}", flush=True)
 
-            prov = get(row, "PROV_CODE")
-            mail_prov = get(row, "MAIL_PROV_ABVN")
-            if prov not in {"35", "35.0"} and mail_prov.upper() != "ON":
-                continue
-
-            csd = canonical_city(get(row, "CSD_ENG_NAME"))
+            csd_raw = get(row, "CSDNAME", "CSD_NAME", "CSD_ENG_NAME")
+            csd = normalize(csd_raw)
             if csd not in GTA_CSD_NAMES:
                 continue
 
-            lat = parse_float(get(row, "BG_LATITUDE", "LATITUDE"))
-            lng = parse_float(get(row, "BG_LONGITUDE", "LONGITUDE"))
+            lat = parse_float(get(row, "LATITUDE"))
+            lng = parse_float(get(row, "LONGITUDE"))
             if lat is None or lng is None or not (42.8 <= lat <= 44.6 and -80.5 <= lng <= -78.0):
                 continue
 
-            civic_no = get(row, "CIVIC_NO")
-            street_name = get(row, "OFFICIAL_STREET_NAME", "MAIL_STREET_NAME")
-            if not civic_no or not street_name:
+            civic = get(row, "STREET_NO", "CIVIC_NO")
+            street = get(row, "STREET")
+            if not street:
+                name = get(row, "STR_NAME_PCS", "STR_NAME")
+                stype = get(row, "STR_TYPE_PCS", "STR_TYPE")
+                direction = get(row, "STR_DIR_PCS", "STR_DIR")
+                street = " ".join(bit for bit in [name, stype, direction] if bit)
+            full_addr = get(row, "FULL_ADDR")
+            if not civic and full_addr:
+                match = re.match(r"^\s*([0-9]+[A-Za-z-]*)\s+(.+)$", full_addr)
+                if match:
+                    civic, street = match.group(1), street or match.group(2)
+            if not civic or not street:
                 continue
 
-            location_id = get(row, "LOC_GUID", "LOCATIONID", "LOCATION_ID")
-            dedupe_key = location_id or "|".join([
-                civic_no,
-                get(row, "CIVIC_NO_SUFFIX"),
-                street_name,
-                get(row, "OFFICIAL_STREET_TYPE", "MAIL_STREET_TYPE"),
-                get(row, "OFFICIAL_STREET_DIR", "MAIL_STREET_DIR"),
-                csd,
-            ])
-            if dedupe_key in seen_locations:
-                continue
-            seen_locations.add(dedupe_key)
+            city = get(row, "CITY_PCS", "CITY") or csd_raw
+            postal = format_postal(get(row, "POSTAL_CODE"))
 
-            suffix = get(row, "CIVIC_NO_SUFFIX")
-            street_type = get(row, "OFFICIAL_STREET_TYPE", "MAIL_STREET_TYPE")
-            street_dir = get(row, "OFFICIAL_STREET_DIR", "MAIL_STREET_DIR")
-            mail_city = get(row, "MAIL_MUN_NAME") or get(row, "CSD_ENG_NAME")
-            postal = format_postal(get(row, "MAIL_POSTAL_CODE", "POSTAL_CODE"))
-
-            street_bits = [civic_no]
-            if suffix:
-                street_bits.append(suffix)
-            street_bits.append(street_name)
-            if street_type:
-                street_bits.append(street_type)
-            if street_dir:
-                street_bits.append(street_dir)
-            street = " ".join(bit for bit in street_bits if bit).strip()
-            label = f"{street}, {mail_city}, ON" + (f" {postal}" if postal else "")
-            search_key = normalize(" ".join([street, mail_city, postal]))
-            key_compact = compact(search_key)
-            if len(key_compact) < 3:
+            # ODA's group ID intentionally groups the same civic/street address. If it is
+            # unavailable, build an equivalent key. Unit numbers are intentionally omitted.
+            dedupe_key = get(row, "ID_GROUP") or "|".join([csd, normalize(civic), normalize(street)])
+            if dedupe_key in seen_addresses:
                 continue
-            chunk_key = key_compact[:3]
-            chunks[chunk_key].append([search_key, label, round(lat, 6), round(lng, 6)])
+            seen_addresses.add(dedupe_key)
+
+            label = f"{civic} {street}, {city}, ON" + (f" {postal}" if postal else "")
+            search_key = normalize(" ".join([civic, street, city, postal]))
+            compacted = compact(search_key)
+            if len(compacted) < 3:
+                continue
+            chunks[compacted[:3]].append([search_key, label, round(lat, 5), round(lng, 5)])
             accepted += 1
 
-            city_label = (get(row, "CSD_ENG_NAME") or mail_city).strip()
-            city_key = normalize(city_label)
+            city_key = normalize(csd_raw or city)
             city_sums[city_key][0] += lat
             city_sums[city_key][1] += lng
             city_sums[city_key][2] += 1
-
             postal_raw = re.sub(r"[^A-Za-z0-9]", "", postal).upper()
             if len(postal_raw) >= 3:
                 fsa = postal_raw[:3]
@@ -255,35 +188,33 @@ def build(args: argparse.Namespace) -> int:
                 fsa_sums[fsa][2] += 1
 
     if accepted == 0:
-        raise RuntimeError("No GTA addresses were found in the NAR archive; inspect source format/headers.")
+        raise RuntimeError("Ontario ODA was readable but no GTA addresses matched; source schema needs review.")
 
-    total_bytes = 0
-    max_chunk_bytes = 0
+    total_bytes = max_chunk_bytes = 0
     for key, rows in chunks.items():
         rows.sort(key=lambda row: (row[0], row[1]))
-        path = chunks_dir / f"{key}.json"
         payload = json.dumps(rows, ensure_ascii=False, separators=(",", ":"))
-        path.write_text(payload, encoding="utf-8")
+        (chunks_dir / f"{key}.json").write_text(payload, encoding="utf-8")
         size = len(payload.encode("utf-8"))
         total_bytes += size
         max_chunk_bytes = max(max_chunk_bytes, size)
 
-    fallback_by_key = {normalize(str(row[0])): row for row in fallback_areas if isinstance(row, list) and len(row) >= 5}
+    fallback_by_key = {
+        normalize(str(row[0])): row for row in fallback_areas
+        if isinstance(row, list) and len(row) >= 5
+    }
     generated_areas: dict[str, list] = dict(fallback_by_key)
-
     for city_key, (lat_sum, lng_sum, count) in city_sums.items():
         if count <= 0:
             continue
-        label = next((row[1] for key, row in fallback_by_key.items() if key == city_key), None)
-        if not label:
-            label = city_key.title() + ", ON"
-        generated_areas[city_key] = [city_key, label, round(lat_sum / count, 6), round(lng_sum / count, 6), "city"]
-
+        fallback = fallback_by_key.get(city_key)
+        label = fallback[1] if fallback else city_key.title() + ", ON"
+        generated_areas[city_key] = [city_key, label, round(lat_sum / count, 5), round(lng_sum / count, 5), "city"]
     for fsa, (lat_sum, lng_sum, count) in fsa_sums.items():
         if count < 2:
             continue
         key = normalize(fsa)
-        generated_areas[key] = [key, f"{fsa}, ON", round(lat_sum / count, 6), round(lng_sum / count, 6), "postal"]
+        generated_areas[key] = [key, f"{fsa}, ON", round(lat_sum / count, 5), round(lng_sum / count, 5), "postal"]
 
     areas_payload = {
         "release": args.release,
@@ -301,27 +232,25 @@ def build(args: argparse.Namespace) -> int:
         "jsonBytes": total_bytes,
         "largestChunkBytes": max_chunk_bytes,
         "unitAddressesOmitted": True,
-        "strategy": "one record per physical building; 3-character civic-address prefix chunks",
+        "strategy": "GTA-only, one row per civic/street building, static 3-character prefix chunks",
     }
     (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-
     print(json.dumps(manifest, indent=2), flush=True)
     if total_bytes > args.max_bytes:
         raise RuntimeError(
-            f"Generated index is {total_bytes / 1024 / 1024:.1f} MB, above configured "
-            f"{args.max_bytes / 1024 / 1024:.0f} MB safety limit."
+            f"Generated address index is {total_bytes / 1024 / 1024:.1f} MB; safety ceiling is "
+            f"{args.max_bytes / 1024 / 1024:.0f} MB."
         )
     return 0
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--zip", required=True, help="Path to downloaded Statistics Canada NAR zip")
+    parser.add_argument("--zip", required=True, help="Path to Statistics Canada Ontario ODA ZIP")
     parser.add_argument("--output", default="public/address-index")
-    parser.add_argument("--release", default="202606")
-    parser.add_argument("--max-bytes", type=int, default=450 * 1024 * 1024)
-    args = parser.parse_args()
-    return build(args)
+    parser.add_argument("--release", default="ODA-ON-v1")
+    parser.add_argument("--max-bytes", type=int, default=350 * 1024 * 1024)
+    return build(parser.parse_args())
 
 
 if __name__ == "__main__":
