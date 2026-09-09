@@ -22,7 +22,9 @@ function baseUrl(path: string) {
 
 async function loadPostalIndex(): Promise<PostalIndex> {
   if (!indexPromise) {
-    indexPromise = fetch(baseUrl('postal-index.json'), {cache: 'force-cache'})
+    // Postal data is a tiny static file. Always revalidate it so an older Safari/PWA cache
+    // can never preserve a missing or stale postal index after a production deployment.
+    indexPromise = fetch(baseUrl('postal-index.json'), {cache: 'no-cache'})
       .then(async (response) => response.ok ? await response.json() as PostalIndex : {areas: []})
       .catch(() => ({areas: []}));
   }
