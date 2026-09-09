@@ -1,4 +1,5 @@
 import type {Session} from '@supabase/supabase-js';
+import {appConfig} from '../config/env';
 import {supabaseClient as client} from './supabaseClient';
 
 export type CommunityAuthState = {signedIn: boolean; email: string | null};
@@ -9,6 +10,11 @@ function stateFromSession(session: Session | null): CommunityAuthState {
     signedIn: Boolean(user && !user.is_anonymous),
     email: user && !user.is_anonymous ? user.email ?? null : null,
   };
+}
+
+function authRedirectUrl() {
+  const basePath = appConfig.basePath === '/' ? '' : appConfig.basePath.replace(/\/$/, '');
+  return new URL(`${basePath}/auth/confirm`, window.location.origin).toString();
 }
 
 export async function getCommunityAuthState(): Promise<CommunityAuthState> {
@@ -26,7 +32,7 @@ export function subscribeCommunityAuth(onChange: (state: CommunityAuthState) => 
 export async function beginCommunitySignIn(email: string) {
   const normalized = email.trim().toLowerCase();
   if (!normalized) throw new Error('Enter your email address.');
-  const redirectTo = new URL('auth/confirm', window.location.href).toString();
+  const redirectTo = authRedirectUrl();
   const {data: {session}} = await client.auth.getSession();
 
   if (session?.user && !session.user.is_anonymous) {
