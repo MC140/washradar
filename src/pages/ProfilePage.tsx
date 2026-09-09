@@ -1,4 +1,4 @@
-import {BarChart3, Bell, CarFront, ChevronRight, Edit3, Heart, ShieldCheck, Sparkles, Trophy, User} from 'lucide-react';
+import {BarChart3, Bell, CarFront, ChevronRight, Edit3, Heart, KeyRound, ShieldCheck, Sparkles, Trophy, User} from 'lucide-react';
 import {useEffect, useMemo, useState} from 'react';
 import type {FormEvent} from 'react';
 import {Link} from 'react-router-dom';
@@ -6,7 +6,7 @@ import {toast} from 'sonner';
 import {AccountAuth} from '../components/AccountAuth';
 import {contributorLevel, initials} from '../domain/community';
 import {getCommunityDashboard, saveCommunityProfile, type CommunityDashboard} from '../services/community';
-import {signOutCommunity} from '../services/communityAuth';
+import {signOutCommunity, updateAccountPassword} from '../services/communityAuth';
 import {useCommunityAuth} from '../state/useCommunityAuth';
 import {useWashRadar} from '../state/WashRadarContext';
 import '../community.css';
@@ -15,6 +15,8 @@ export function ProfilePage() {
   const {metrics, mode, refresh} = useWashRadar();
   const auth = useCommunityAuth();
   const [busy, setBusy] = useState(false);
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
   const [dashboard, setDashboard] = useState<CommunityDashboard | null>(null);
   const [editing, setEditing] = useState(false);
   const [displayName, setDisplayName] = useState('');
@@ -47,6 +49,20 @@ export function ProfilePage() {
     } finally { setBusy(false); }
   };
 
+  const savePassword = async (event: FormEvent) => {
+    event.preventDefault();
+    setPasswordBusy(true);
+    try {
+      await updateAccountPassword(newPassword);
+      setNewPassword('');
+      toast.success('Password updated. You can use it for email sign-in now.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Password could not be updated.');
+    } finally {
+      setPasswordBusy(false);
+    }
+  };
+
   if (!auth.ready) return <section className="community-page"><div className="panel community-loading">Restoring your WashRadar profile…</div></section>;
 
   if (!auth.signedIn) return <section className="profile-layout"><div className="panel profile-main"><span className="profile-icon"><User size={25} /></span><p className="eyebrow">YOUR WASHRADAR</p><h1>Build a contributor identity.</h1><p>Explore without an account. Sign in when you want a profile, Radar Points, challenge progress, vehicles, saved washes and contribution history across devices.</p>
@@ -68,6 +84,13 @@ export function ProfilePage() {
     </div>
 
     {editing && <form className="panel profile-editor" onSubmit={saveProfile}><div className="section-heading"><div><p className="eyebrow">PROFILE</p><h2>How drivers know you</h2></div><User /></div><div className="profile-fields"><label>Display name<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} maxLength={50} required placeholder="Your name" /></label><label>Handle<input value={handle} onChange={(event) => setHandle(event.target.value.replace(/^@/, ''))} maxLength={24} required placeholder="washscout" /></label></div><label>Short bio <small>optional</small><input value={bio} onChange={(event) => setBio(event.target.value)} maxLength={120} placeholder="GTA wash scout" /></label><p className="privacy-hint">Your display name and handle identify your contributor profile. Your email is never shown publicly by this screen.</p><div className="form-actions"><button type="button" className="secondary-button" onClick={() => setEditing(false)}>Cancel</button><button className="primary-button" disabled={busy}>{busy ? 'Saving…' : 'Save profile'}</button></div></form>}
+
+    <form className="panel profile-editor" onSubmit={savePassword}>
+      <div className="section-heading"><div><p className="eyebrow">ACCOUNT SECURITY</p><h2>Set or change password</h2></div><KeyRound /></div>
+      <label>New password<input name="new-password" type="password" required minLength={8} maxLength={128} autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="8 or more characters" /></label>
+      <p className="privacy-hint">Use a new password you have not shared. After saving, you can sign in with your email and this password.</p>
+      <div className="form-actions"><button className="primary-button" disabled={passwordBusy || newPassword.length < 8}>{passwordBusy ? 'Updating…' : 'Update password'}</button></div>
+    </form>
 
     <div className="profile-dashboard-grid">
       <div className="panel contributor-level-card"><div className="level-title"><Trophy /><div><p className="eyebrow">LEVEL {level.level}</p><h2>{level.name}</h2></div><strong>{dashboard?.points ?? 0}<small> pts</small></strong></div><div className="level-progress"><i style={{width: `${Math.round(level.progress * 100)}%`}} /></div><p>{level.pointsToNext ? `${level.pointsToNext} Radar Points to the next level.` : 'Top contributor level reached.'}</p></div>
