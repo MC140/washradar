@@ -95,14 +95,18 @@ test('manual GTA street-address search returns production wash results', async (
   await expect(page.locator('.wash-card').first()).toBeVisible();
 });
 
-test('friends beta exposes email/password only and strong signup fields', async ({page}) => {
+test('friends beta exposes email/password only and password-manager-friendly signup', async ({page}) => {
   await page.goto('/profile');
   await expect(page.getByRole('button', {name: 'Continue with Google'})).toHaveCount(0);
   await expect(page.getByRole('button', {name: 'Continue with Apple'})).toHaveCount(0);
   await expect(page.getByRole('tab', {name: 'Sign in'})).toBeVisible();
   await page.getByRole('tab', {name: 'Create account'}).click();
-  await expect(page.getByLabel('Password', {exact: true})).toHaveAttribute('minlength', '12');
-  await expect(page.getByLabel('Confirm password', {exact: true})).toHaveAttribute('minlength', '12');
+  const password = page.getByLabel('Password', {exact: true});
+  await expect(password).toHaveAttribute('minlength', '8');
+  await expect(password).toHaveAttribute('maxlength', '128');
+  await expect(password).toHaveAttribute('autocomplete', 'new-password');
+  await expect(page.getByLabel('Confirm password', {exact: true})).toHaveCount(0);
+  await expect(page.getByText(/Suggested strong passwords/i)).toBeVisible();
 });
 
 test('queue target UX does not promise background push delivery', async ({page}) => {
