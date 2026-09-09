@@ -11,7 +11,7 @@ permissions:
 jobs:
   quality-and-e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -23,6 +23,8 @@ jobs:
         run: npm run check
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
+      - name: Deterministic demo write-flow end-to-end suite
+        run: npm run test:e2e
       - name: Live production read-only end-to-end audit
         run: npx playwright test --config=playwright.live.config.ts
       - name: Upload Playwright audit evidence
