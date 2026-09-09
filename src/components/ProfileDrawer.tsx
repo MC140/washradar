@@ -3,8 +3,8 @@ import {useEffect, useMemo, useState, type FormEvent, type ReactNode} from 'reac
 import {Link} from 'react-router-dom';
 import {toast} from 'sonner';
 import {contributorLevel, initials} from '../domain/community';
-import {getCommunityDashboard, type CommunityDashboard} from '../services/community';
 import {beginCommunitySignIn, signOutCommunity} from '../services/communityAuth';
+import {getCommunitySummary, type CommunitySummary} from '../services/communitySummary';
 import {useCommunityAuth} from '../state/useCommunityAuth';
 import {useWashRadar} from '../state/WashRadarContext';
 import '../community.css';
@@ -15,7 +15,7 @@ type Props = {open: boolean; onClose: () => void};
 export function ProfileDrawer({open, onClose}: Props) {
   const auth = useCommunityAuth();
   const {refresh} = useWashRadar();
-  const [dashboard, setDashboard] = useState<CommunityDashboard | null>(null);
+  const [summary, setSummary] = useState<CommunitySummary | null>(null);
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -33,17 +33,20 @@ export function ProfileDrawer({open, onClose}: Props) {
 
   useEffect(() => {
     if (!open || !auth.ready) return;
+    if (!auth.signedIn) {
+      setSummary(null);
+      return;
+    }
     let active = true;
-    void getCommunityDashboard().then((value) => { if (active) setDashboard(value); });
+    void getCommunitySummary().then((value) => { if (active) setSummary(value); });
     return () => { active = false; };
   }, [open, auth.ready, auth.signedIn]);
 
-  const level = useMemo(() => contributorLevel(dashboard?.points ?? 0), [dashboard?.points]);
+  const level = useMemo(() => contributorLevel(summary?.points ?? 0), [summary?.points]);
   if (!open) return null;
 
-  const profile = dashboard?.profile;
-  const name = profile?.displayName || (auth.signedIn ? 'Your WashRadar' : 'Hi there!');
-  const avatarText = initials(profile?.displayName, profile?.email ?? auth.email);
+  const name = summary?.displayName || (auth.signedIn ? 'Your WashRadar' : 'Hi there!');
+  const avatarText = initials(summary?.displayName, summary?.email ?? auth.email);
 
   const signIn = async (event: FormEvent) => {
     event.preventDefault();
@@ -63,7 +66,7 @@ export function ProfileDrawer({open, onClose}: Props) {
     setBusy(true);
     try {
       await signOutCommunity();
-      setDashboard(null);
+      setSummary(null);
       await refresh();
       toast.success('Signed out.');
     } catch (error) {
@@ -86,12 +89,12 @@ export function ProfileDrawer({open, onClose}: Props) {
 
       {!auth.ready ? <div className="drawer-loading">Restoring your account…</div> : auth.signedIn ? <>
         <Link className="drawer-profile-card" to="/profile" onClick={onClose}>
-          <div className="drawer-avatar">{profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" /> : avatarText}</div>
-          <div><strong>{profile?.displayName || 'Complete your profile'}</strong><span>{profile?.handle ? `@${profile.handle}` : profile?.email ?? auth.email}</span><small>Level {level.level} · {level.name}</small></div>
+          <div className="drawer-avatar">{summary?.avatarUrl ? <img src={summary.avatarUrl} alt="" /> : avatarText}</div>
+          <div><strong>{summary?.displayName || 'Complete your profile'}</strong><span>{summary?.handle ? `@${summary.handle}` : summary?.email ?? auth.email}</span><small>Level {level.level} · {level.name}</small></div>
           <ChevronRight size={20} />
         </Link>
 
-        <div className="drawer-points"><Trophy size={20} /><div><strong>{dashboard?.points ?? 0}</strong><span>Radar Points</span></div><small>{level.pointsToNext ? `${level.pointsToNext} to next level` : 'Top level'}</small></div>
+        <div className="drawer-points"><Trophy size={20} /><div><strong>{summary?.points ?? 0}</strong><span>Radar Points</span></div><small>{level.pointsToNext ? `${level.pointsToNext} to next level` : 'Top level'}</small></div>
 
         <nav className="drawer-menu" aria-label="Account shortcuts">
           <DrawerLink to="/profile" icon={<User />} title="My Profile" detail="Identity, activity & stats" onClose={onClose} />
