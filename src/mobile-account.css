@@ -1,0 +1,37 @@
+@media (max-width: 700px) {
+  /* styles.css historically hides every .profile-link on mobile. The account drawer
+     trigger intentionally shares that desktop visual class, so explicitly restore it
+     while keeping the separate alerts shortcut hidden to preserve header space. */
+  .site-header .account-menu-trigger.profile-link {
+    display: grid !important;
+    flex: 0 0 37px;
+    width: 37px;
+    height: 37px;
+    position: relative;
+  }
+
+  .site-header .header-alert-link {
+    display: none !important;
+  }
+
+  .site-header .location-button {
+    max-width: 122px;
+    min-width: 0;
+  }
+
+  .site-header .account-menu-trigger.signed-in {
+    background: var(--green);
+    color: #fff;
+  }
+
+  .site-header .account-menu-trigger > i {
+    position: absolute;
+    right: 1px;
+    bottom: 1px;
+    width: 8px;
+    height: 8px;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    background: #34c38f;
+  }
+}
