@@ -18,7 +18,7 @@ test('guest browse → save → saved → details journey works', async ({page})
   await resetAndUseLocation(page);
   await expect(page.getByText('DEMO MODE')).toBeVisible();
   await page.getByLabel('Save this wash').first().click();
-  await page.locator('a[href="/saved"]').first().click();
+  await page.locator('a[href="/saved"]:visible').first().click();
   await expect(page.getByRole('heading', {name: 'Saved washes.'})).toBeVisible();
   await expect(page.getByText('ClearRoute Touchless').first()).toBeVisible();
   await page.getByRole('link', {name: 'Details'}).first().click();
@@ -49,7 +49,7 @@ test('queue target journey is explicitly in-app and persists in the SPA', async 
   await page.getByRole('button', {name: /Alert me/}).click();
   await expect(page.getByText(/Check WashRadar/i)).toBeVisible();
   await page.getByRole('button', {name: 'Save queue target'}).click();
-  await page.locator('a[href="/alerts"]').first().click();
+  await page.locator('a[href="/alerts"]:visible').first().click();
   await expect(page.getByRole('heading', {name: 'Save a queue target.'})).toBeVisible();
   await expect(page.getByText('ClearRoute Touchless').first()).toBeVisible();
   await expect(page.getByText(/TARGET (MET|SAVED)/).first()).toBeVisible();
@@ -62,8 +62,8 @@ test('friends beta account UI is email/password only with stronger signup passwo
   await expect(page.getByRole('button', {name: 'Continue with Apple'})).toHaveCount(0);
   await expect(page.getByRole('tab', {name: 'Sign in'})).toBeVisible();
   await page.getByRole('tab', {name: 'Create account'}).click();
-  const password = page.getByLabel('Password').locator('input');
-  const confirmation = page.getByLabel('Confirm password').locator('input');
+  const password = page.getByLabel('Password');
+  const confirmation = page.getByLabel('Confirm password');
   await expect(password).toHaveAttribute('minlength', '12');
   await expect(confirmation).toHaveAttribute('minlength', '12');
   await expect(page.getByText(/unique 12\+ character password/i)).toBeVisible();
