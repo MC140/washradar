@@ -1,4 +1,4 @@
-import {ArrowLeft, Bell, Car, Check, Clock3, Droplets, MapPin, Navigation, ShieldCheck, Star, TimerReset, TriangleAlert} from 'lucide-react';
+import {ArrowLeft, Bell, Check, Clock3, Droplets, MapPin, Navigation, ShieldCheck, Star, TimerReset, TriangleAlert} from 'lucide-react';
 import {useEffect, useState} from 'react';
 import {Link, useParams} from 'react-router-dom';
 import {toast} from 'sonner';
@@ -51,7 +51,6 @@ export function WashDetailsPage() {
   const unavailable = wash.estimate.operatingStatus === 'closed' || wash.estimate.operatingStatus === 'unavailable';
   const queueKnown = !unavailable && hasQueueEvidence(wash, wash.estimate);
   const queueMinutes = queueKnown ? wash.estimate.waitMinutes : null;
-  const totalMinutes = queueMinutes === null ? null : wash.driveMinutes + queueMinutes + wash.estimatedWashMinutes;
   const verifiedPriceDates = wash.packages.map((item) => item.verifiedAt).filter((value): value is string => Boolean(value));
   const latestPriceVerification = verifiedPriceDates.length ? Math.max(...verifiedPriceDates.map((value) => new Date(value).getTime())) : null;
   const priceAge = latestPriceVerification === null ? null : Math.floor((Date.now() - latestPriceVerification) / 86_400_000);
@@ -83,12 +82,11 @@ export function WashDetailsPage() {
               <div><small>CONFIDENCE</small><b><ShieldCheck size={17} /> {queueKnown ? wash.estimate.confidenceLabel : 'Queue unknown'}</b><span>{wash.estimate.recentSignalCount ? wash.estimate.recentSignalCount + ' recent signals' : wash.historicalSampleCount > 0 ? wash.historicalSampleCount + ' historical samples' : 'Waiting for driver or historical data'}</span></div>
             </div>
             <div className="large-equation">
-              <span><Car size={20} /><small>DRIVE</small><b>{wash.driveMinutes} min</b></span><i>+</i>
-              <span><Clock3 size={20} /><small>WAIT</small><b>{queueMinutes === null ? '—' : queueMinutes + ' min'}</b></span><i>+</i>
-              <span><Droplets size={20} /><small>WASH EST.</small><b>~{wash.estimatedWashMinutes} min</b></span><i>=</i>
-              <span className="total"><small>DONE IN</small><b>{totalMinutes === null ? '—' : '~' + totalMinutes + ' min'}</b></span>
+              <span><MapPin size={20} /><small>DISTANCE</small><b>{wash.distanceKm.toFixed(1)} km</b></span><i>·</i>
+              <span><Clock3 size={20} /><small>WAIT</small><b>{queueMinutes === null ? '—' : queueMinutes + ' min'}</b></span><i>·</i>
+              <span><Droplets size={20} /><small>WASH EST.</small><b>~{wash.estimatedWashMinutes} min</b></span>
             </div>
-            {queueMinutes === null && <p className="disclaimer"><TriangleAlert size={14} /> Done-in time is withheld until WashRadar has queue evidence. Unknown wait is never treated as zero.</p>}
+            <p className="disclaimer"><TriangleAlert size={14} /> Travel time and traffic are intentionally left to your navigation app. WashRadar focuses on distance and queue conditions.</p>
             <div className="detail-actions">
               <button className="queue-update-button" onClick={() => setReportOpen(true)}>Update queue</button>
               <button className="secondary-button" disabled={Boolean(session)} onClick={() => setQueueOpen(true)}><TimerReset size={17} /> Join queue</button>
@@ -113,7 +111,7 @@ export function WashDetailsPage() {
               <div><dt>Wash type</dt><dd>{wash.types.length ? wash.types.map((type) => WASH_TYPE_CONFIG[type].label).join(', ') : 'Not yet verified'}</dd></div>
               <div><dt>Hours today</dt><dd>{hoursToday(wash.hours)}</dd></div>
               <div><dt>Distance</dt><dd>{wash.distanceKm.toFixed(1)} km</dd></div>
-              <div><dt>Drive estimate</dt><dd>{wash.driveMinutes} min · {wash.driveTimeSource === 'ROUTE' ? 'Traffic-aware route' : 'Distance estimate'}</dd></div>
+              <div><dt>Navigation</dt><dd>Tap Directions for live traffic and ETA in your Maps app</dd></div>
               <div><dt>Amenities</dt><dd>{wash.amenities.join(', ') || 'Not listed'}</dd></div>
               <div><dt>Address</dt><dd>{wash.address}, {wash.city}, {wash.region}</dd></div>
             </dl>
