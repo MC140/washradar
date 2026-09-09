@@ -13,8 +13,6 @@ Deno.serve(async (request) => {
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return json(request, {error: 'Enter a valid city, postal code or address.'}, 400);
 
-  // Zero-cost routing policy: normal WashRadar browsing never calls Google Routes.
-  // Directions opens the user's navigation app, which already provides live traffic.
   if (parsed.data.action === 'routes') return json(request, {routes: {}, source: 'disabled-zero-cost'});
 
   const db = serviceClient();
@@ -22,7 +20,10 @@ Deno.serve(async (request) => {
   const tenMinutesAgo = new Date(Date.now() - 10 * 60_000).toISOString();
   const {count} = await db.from('api_request_log').select('id', {head: true, count: 'exact'}).eq('provider', 'google-geocode').eq('actor_hash', actorHash).gte('created_at', tenMinutesAgo);
   if ((count ?? 0) >= 8) return json(request, {error: 'Search limit reached. Try again shortly.'}, 429);
-  const normalized = parsed.data.query.toLowerCase().replace(/\s+/g, ' ');
+
+  // Fallback geocoding stores only a salted hash of the query. Exact home-address text
+  // is unnecessary for cache reuse and is deliberately not retained.
+  const normalized = parsed.data.query.toLowerCase().replace(/\s+/g, ' ').trim();
   const queryHash = await hashValue(normalized);
   const {data: cached} = await db.from('geocode_cache').select('latitude,longitude').eq('query_hash', queryHash).gt('expires_at', new Date().toISOString()).maybeSingle();
   if (cached) return json(request, {point: {lat: Number(cached.latitude), lng: Number(cached.longitude)}, source: 'cache'});
@@ -32,31 +33,26 @@ Deno.serve(async (request) => {
   const {data: quota} = await db.rpc('consume_api_quota', {p_provider: 'google-geocode', p_daily_limit: Number(Deno.env.get('GOOGLE_GEOCODE_DAILY_LIMIT') || 200)});
   if (!quota) return json(request, {error: 'Address search is resting for today. Use current location instead.'}, 429);
   await db.from('api_request_log').insert({provider: 'google-geocode', actor_hash: actorHash});
+
   const url = new URL('https://maps.googleapis.com/maps/api/geocode/json');
   url.searchParams.set('address', parsed.data.query);
   url.searchParams.set('components', 'country:CA');
   url.searchParams.set('key', key);
   try {
     const response = await fetch(url, {signal: AbortSignal.timeout(6000)});
-    if (!response.ok) {
-      console.error(JSON.stringify({event: 'geocode_provider_http_error', status: response.status}));
-      return json(request, {error: 'Address search is temporarily unavailable.'}, 502);
-    }
+    if (!response.ok) return json(request, {error: 'Address search is temporarily unavailable.'}, 502);
     const result = await response.json();
     if (result.status === 'ZERO_RESULTS') return json(request, {point: null});
-    if (result.status !== 'OK') {
-      console.error(JSON.stringify({event: 'geocode_provider_error', status: result.status, message: result.error_message ?? 'unknown'}));
-      return json(request, {error: 'Address search is temporarily unavailable.'}, 502);
-    }
+    if (result.status !== 'OK') return json(request, {error: 'Address search is temporarily unavailable.'}, 502);
     const location = result.results?.[0]?.geometry?.location;
     if (!location) return json(request, {point: null});
     await db.from('geocode_cache').upsert({
       query_hash: queryHash,
-      query_normalized: normalized,
+      query_normalized: null,
       latitude: location.lat,
       longitude: location.lng,
       provider: 'google',
-      expires_at: new Date(Date.now() + 30 * 86400_000).toISOString(),
+      expires_at: new Date(Date.now() + 365 * 86400_000).toISOString(),
     });
     return json(request, {point: {lat: location.lat, lng: location.lng}, source: 'google'});
   } catch (error) {
