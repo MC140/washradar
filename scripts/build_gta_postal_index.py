@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a tiny zero-cost GTA postal/FSA index from GeoNames Canada postal data."""
+"""Build a tiny zero-cost GTA postal/FSA index from GeoNames Canada full postal data."""
 import argparse
 import csv
 import json
@@ -73,8 +73,8 @@ def main() -> None:
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     payload = {
-        "source": "GeoNames Canada postal codes",
-        "license": "CC BY 3.0",
+        "source": "GeoNames Canada full postal codes",
+        "license": "CC BY 4.0",
         "coverage": "GTA and nearby Southern Ontario FSAs",
         "areas": areas,
     }
