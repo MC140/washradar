@@ -16,35 +16,56 @@ Its differentiated value is **queue intelligence + trustworthy wash information*
 
 This README is the handoff for future ChatGPT/Codex/model sessions.
 
-**Do not assume an old PR number mentioned in historical notes is the current production state.** Before doing project work:
+Before doing project work:
 
 1. Read `main`.
 2. Check the newest merged PRs.
 3. Check the latest **Deploy WashRadar to GitHub Pages** workflow.
-4. Treat this README's architecture/status as context, but GitHub `main` + Actions are the final source of truth.
+4. Treat this README as context, but GitHub `main` + Actions are the final source of truth.
 
-PR numbers below are historical milestones, not a pointer to an active branch.
+Do not restart work from an old PR just because it appears in historical notes.
 
 ---
 
 # Current production baseline — 2026-09-09
 
-The current feature baseline includes the work through **PR #22**. **PR #23** refreshed this README/handoff to the current production architecture.
+The current production feature baseline includes work through **PR #25**.
 
-Recent production changes:
+## Latest release — PR #25
+
+**PR #25 — `Add contributor profiles, Radar Challenges and My Cars`** added the first complete contributor-retention layer:
+
+- **Profile v2** with display name, unique handle, optional bio, contributor level, Radar Points, contribution metrics and recent activity.
+- **Radar Challenges** with server-computed progress and one-time challenge rewards.
+- **My Cars** with private year/make/model, optional nickname, optional VIN and one primary vehicle.
+- **Radar Points** for useful nearby contributions:
+  - nearby queue update: +20;
+  - verified completed queue wait: +75;
+  - nearby wash-type confirmation: +15;
+  - one-time challenge bonuses on completion.
+- Base contribution points are capped at **200/day** to reduce farming.
+- **Remote reports earn no Radar Points** but can still contribute weak evidence to the trust model.
+- Points and challenge rewards are intentionally **separate from queue trust**. They do not increase report confidence.
+- Reward functions are server-controlled; authenticated browser clients cannot directly execute the internal award functions.
+- Anonymous contributor sign-in first attempts to preserve the same Supabase user ID when converting to email identity, so contribution history can stay attached where the auth configuration permits it.
+
+Production database migrations for profiles, challenges, points, vehicles and RLS are applied. GitHub Pages deployment for merge commit `52f1400799c7791c59325ff7561de6a15aa65bb6` completed successfully.
+
+## Recent search / platform work
 
 - **PR #21 — `Use full Canada postal dataset for GTA FSA search`**
-  - replaced the failed postal source used in PR #20;
-  - builds GTA/Southern Ontario FSA centroids from the full Canada postal dataset;
-  - deployment validation requires `M1X` and at least 100 generated FSAs.
+  - replaced the incomplete postal source from PR #20;
+  - builds GTA/Southern Ontario FSA centroids from the full Canadian postal dataset;
+  - deployment requires `M1X` and a non-trivial FSA set.
 - **PR #22 — `Prevent stale postal search on iPhone/PWA`**
-  - revalidates the postal index instead of relying on stale `force-cache` data;
-  - bumps the service-worker shell cache so existing iPhone/PWA users receive the new postal-search assets.
+  - postal index revalidates instead of depending on stale `force-cache` data;
+  - service-worker shell cache was bumped so existing mobile/PWA clients receive new postal assets.
 - **PR #23 — `Refresh README to current production state`**
-  - removed the stale PR #13 blocker/handoff;
-  - made `main`, newest merged PRs and the latest Pages workflow the source-of-truth sequence for future sessions.
+  - replaced the stale PR #13 handoff and established the current source-of-truth workflow.
+- **PR #24 — `Document complete pull-request history`**
+  - added the PR ledger used for project archaeology/handoff.
 
-**Important:** PR #13 is historical. It introduced the first zero-cost GTA address-autocomplete implementation, but its original deployment failure is no longer the current project blocker. Do not resume work from the PR #13 failure unless investigating history.
+**Important:** PR #13's original NAR deployment problem is historical and is not the current blocker.
 
 ---
 
@@ -53,11 +74,89 @@ Recent production changes:
 > **Low friction for users. High scrutiny for data.**
 
 - Browsing must not require an account.
-- Basic queue contributions must not be blocked by CAPTCHA or invasive fingerprinting.
-- Nearby/fresh/verified evidence receives more influence than remote or stale evidence.
-- Unknown data stays unknown; never silently turn missing queue information into `0`.
+- Basic queue contributions must not require a permanent account.
+- Nearby/fresh/verified evidence receives more influence than remote/stale evidence.
+- Unknown data stays unknown; never silently turn missing queue data into `0`.
 - Paid placements must never alter organic recommendation scoring.
 - Normal browsing should generate **$0 of paid Google API traffic whenever practical**.
+- **Trust and rewards are separate systems.** Points, badges or challenges must never make an inaccurate report more trusted.
+
+---
+
+# Contributor / community architecture
+
+## Queue trust
+
+General evidence ordering:
+
+1. verified completed queue session;
+2. fresh nearby GPS report;
+3. older/less precise nearby report;
+4. remote report.
+
+Freshness decays roughly from strongest at ≤5 minutes to no live influence after ~60 minutes. Reports are combined using proximity, freshness, reputation and agreement/outlier penalties. Only the latest active signal from a contributor should materially influence a wash.
+
+## Radar Points
+
+Radar Points are a retention/reward system, not a trust score.
+
+Current base awards:
+
+| Contribution | Points |
+| --- | ---: |
+| Nearby queue update | 20 |
+| Verified completed wait | 75 |
+| Nearby wash-type confirmation | 15 |
+| Remote report | 0 |
+
+Base contribution points are capped at 200/day. Challenge bonuses are one-time and idempotent.
+
+Contributor levels:
+
+- Level 1 — **New Scout** — 0+
+- Level 2 — **Queue Scout** — 250+
+- Level 3 — **Radar Regular** — 750+
+- Level 4 — **Local Expert** — 1,500+
+- Level 5 — **WashRadar Hero** — 3,000+
+
+## Current challenges
+
+- **First Radar** — first nearby queue update — +100.
+- **Queue Scout** — update 3 different nearby washes — +250.
+- **Verified Wait** — complete a verified `I'm in line` timer — +500.
+- **Wash Detective** — nearby wash-type confirmation — +150.
+- **3-Day Contributor** — contribute on 3 different days — +300.
+- **Local Hero** — help update 5 different nearby washes — +750.
+
+Challenge progress is derived from server-side contribution history rather than browser counters.
+
+## Profile v2
+
+Signed-in users can have:
+
+- display name;
+- unique handle;
+- optional short bio;
+- Radar Points / level;
+- reports, verified waits, reputation and streak;
+- recent contribution history;
+- saved washes / alerts links;
+- My Cars.
+
+Email should remain account/private information, not a public-facing contributor label.
+
+## My Cars
+
+`user_vehicles` is private under RLS and supports:
+
+- year;
+- make;
+- model;
+- optional nickname;
+- optional 17-character VIN;
+- one primary vehicle.
+
+The current release stores/manages vehicles. Future vehicle work can add wash compatibility and personalized recommendations without redesigning identity/storage.
 
 ---
 
@@ -67,16 +166,16 @@ Normal WashRadar use should follow this path:
 
 - **GPS:** browser/phone geolocation — $0 to WashRadar.
 - **Distance:** calculated locally from coordinates — $0.
-- **Wash catalogue:** saved in Supabase; no per-user Google Places discovery.
-- **Queue:** WashRadar community + historical data in Supabase.
-- **Postal/FSA search:** static generated index hosted with the PWA — $0 per search.
-- **Street/house autocomplete:** static open-address index hosted with the PWA when generated/available — $0 per search.
+- **Wash catalogue:** canonical records in Supabase; no per-user Places discovery.
+- **Queue:** community + historical data in Supabase.
+- **Postal/FSA search:** static generated index hosted with the PWA — $0/search.
+- **Street/house autocomplete:** static partitioned open-address files — $0/search.
 - **Traffic/ETA:** user's Maps app after tapping **Directions** — $0 to WashRadar.
 - **Google Routes:** disabled for normal browsing.
 - **Google Places:** administrative catalogue maintenance/enrichment only.
-- **Google Geocoding:** fallback only when local search cannot resolve a location.
+- **Google Geocoding:** exceptional fallback when local search cannot resolve a location.
 
-The production `geo-services` function contains a zero-cost guard for route requests; do not reintroduce automatic traffic-route calls without an explicit product decision.
+Do not reintroduce automatic Google traffic-route calls without an explicit product decision.
 
 ---
 
@@ -84,19 +183,17 @@ The production `geo-services` function contains a zero-cost guard for route requ
 
 ## Postal and FSA search
 
-The production build generates a static GTA/Southern Ontario FSA index from a free Canadian postal dataset. Search should resolve postal/FSA input locally before any Google fallback.
+The production build generates a static GTA/Southern Ontario FSA index from a free Canadian postal dataset. Postal input should resolve locally before Google fallback.
 
-PR #21 fixed the dataset source and added deployment validation. PR #22 fixed stale-cache behavior for existing iPhone/PWA sessions.
+PR #21 fixed the data source and added build-time validation. PR #22 fixed stale-cache behavior on existing mobile/PWA sessions.
 
-## House/street address autocomplete
+## House/street autocomplete
 
-The preferred architecture is **static partitioned address files**, not millions of address rows in the primary Supabase database.
+Preferred architecture: **static partitioned files**, not millions of household address rows in the primary Supabase database.
 
-Open-address data is processed into browser-loadable chunks so autocomplete can work without a paid per-keystroke API. Keep one useful routing point per physical building where possible rather than duplicating apartment units that share the same building origin.
+Open address data is processed into browser-loadable chunks. Keep one useful routing point per physical building where possible rather than duplicating every apartment/unit.
 
-Supabase already has an `address_points` / `address_suggestions(...)` foundation as a fallback/server-side option, but it is **not** the preferred place to bulk-store the entire GTA household address universe.
-
-Google geocode fallback cache should store a hash + coordinates rather than retaining raw household search text.
+Google geocode fallback caching should retain a hash + coordinates rather than raw household search text.
 
 ---
 
@@ -107,9 +204,8 @@ Google geocode fallback cache should store a hash + coordinates rather than reta
 - Primary domain: `washradar.ca`.
 - Backup/redirect domain: `carwashbuddy.ca`.
 - Backend: Supabase PostgreSQL, Auth, Realtime and Edge Functions.
-- Map display: open tile-map path, not paid Google map loads.
+- Map display: open tile-map path rather than paid Google map loads.
 - Supabase project: `mwyomijlvjfllgeniqcz`.
-- Last measured database size before any full address bulk-load: about **24 MB / 500 MB Free-plan database allowance**.
 
 Active production Edge Functions include:
 
@@ -121,6 +217,8 @@ Active production Edge Functions include:
 - `wash-ingest`
 - `wash-type-actions`
 
+Community data introduced by PR #25 is primarily handled through RLS-protected tables, database triggers and self-scoped RPCs rather than a new general-purpose public reward API.
+
 ---
 
 # Catalogue state
@@ -131,38 +229,21 @@ Approximate last known GTA catalogue state:
 - ~800 with real weekly opening hours;
 - ~859 in true GTA municipalities;
 - some useful spillover locations intentionally retained;
-- ~188 distinct FSA prefixes across the full catalogue.
+- ~188 distinct FSA prefixes across the catalogue.
 
-Do not run another full Google Places/detail enrichment sweep casually. Prefer selective refreshes for stale/problem locations.
-
----
-
-# Queue trust model
-
-Queue reports are intentionally easy to submit, but influence is weighted.
-
-General trust ordering:
-
-1. verified queue session;
-2. fresh nearby GPS report;
-3. older/less precise nearby report;
-4. remote report.
-
-Freshness decays roughly from strongest at ≤5 minutes to no live influence after ~60 minutes. Remote-only evidence should not be able to create a strong LIVE state by itself. Closure/unavailable evidence requires stronger local support.
-
-The UI must distinguish LIVE / recent / estimated / limited-data states.
+Do not run full Google Places/detail enrichment casually. Prefer selective refreshes for stale/problem locations.
 
 ---
 
 # Wash-type trust model
 
-Google's generic `car_wash` type does not tell us whether a location is touchless, soft-cloth, tunnel, self-serve, hand wash, etc.
+Google's generic `car_wash` type does not reliably identify touchless, soft-cloth, tunnel, self-serve, hand wash, etc.
 
 WashRadar combines evidence from:
 
 - explicit business-name wording;
 - official website;
-- editorial/review evidence only when needed;
+- editorial/review evidence when needed;
 - contributor reports;
 - proximity, reputation and independent agreement.
 
@@ -172,22 +253,22 @@ Only publish a wash type when confidence crosses the configured threshold.
 
 # User-facing timing model
 
-Do **not** make `drive + queue + wash = done in` the core promise now that paid traffic routing is intentionally disabled.
+Do **not** make `drive + queue + wash = done in` the core promise while paid traffic routing is disabled.
 
 Prefer:
 
-- **Distance:** e.g. `2.8 km away`
-- **Queue:** e.g. `~8 min`
-- **Wash:** e.g. `~6 min`
-- **Directions:** opens the user's navigation app for live ETA/traffic
+- **Distance:** `2.8 km away`
+- **Queue:** `~8 min`
+- **Wash:** `~6 min`
+- **Directions:** opens the user's navigation app for live traffic/ETA
 
-Ranking should primarily use distance, queue/confidence, wash duration, open status, user type preference, useful price/rating data and uncertainty penalties.
+Ranking should primarily use distance, queue/confidence, wash duration, open status, wash-type preference, useful price/rating data and uncertainty penalties.
 
 ---
 
 # Ads foundation
 
-The schema supports advertiser businesses, campaigns, creatives, placements, geo/radius targeting, dates, priority, caps, budget/pricing metadata, and impression/click tracking.
+The schema supports advertiser businesses, campaigns, creatives, placements, geo/radius targeting, dates, priority, caps, budgets and impression/click tracking.
 
 Current placement concepts include:
 
@@ -197,20 +278,21 @@ Current placement concepts include:
 - `post_wash_offer`
 - `sponsored_wash`
 
-There are currently no live production advertisers/campaigns. `/ad-preview` exists for fictional placement/viewability testing without real ad analytics.
+There are currently no live production advertisers/campaigns. `/ad-preview` exists for fictional placement/viewability testing without changing organic ranking.
 
 ---
 
 # Near-term priorities
 
-1. Validate PR #21/#22 postal/FSA search on production mobile Safari/Chrome/PWA sessions.
-2. Confirm representative GTA FSAs resolve locally without Google geocoding.
-3. Continue/validate the static street-address autocomplete path using a free/open address source.
-4. Keep address data out of the main Supabase DB unless measured size/performance proves that server-side storage is better.
-5. Keep Google Geocoding as a rare fallback and avoid storing raw household queries.
-6. Continue selective catalogue refreshes rather than bulk paid enrichment.
-7. Validate wash-type enrichment after quota reset and confirm evidence/classifications persist correctly.
-8. Continue physical iPhone/Android tests for GPS, queue reporting, PWA cache/update behavior and deep links.
+1. Physically validate **Profile v2** on production iPhone/Android, including anonymous → email sign-in continuity.
+2. Validate **Challenges** with real nearby queue updates and confirm progress/points change once, not repeatedly.
+3. Validate **My Cars** add/delete/primary behavior from a signed-in account.
+4. Continue postal/FSA and street-address production validation across representative GTA locations.
+5. Test `Use my location` end-to-end on Safari/Chrome/PWA.
+6. Test the complete `Update queue` and `I'm in line` loop with two independent user sessions.
+7. Continue selective wash-type/catalogue enrichment rather than bulk paid enrichment.
+8. After enough beta usage, evaluate sponsored challenge rewards / free-wash partnerships without changing trust weights.
+9. Later add vehicle-aware wash compatibility once reliable wash restriction/compatibility data is available.
 
 ---
 
@@ -220,16 +302,24 @@ There are currently no live production advertisers/campaigns. `/ad-preview` exis
 GitHub Pages (React + Vite PWA)
         |
         +-- app shell / service worker
-        +-- static postal/FSA search data
-        +-- static address-autocomplete chunks
+        +-- static postal/FSA data
+        +-- static address chunks
         |
-        +-- Supabase Data API
-        |     +-- canonical washes
-        |     +-- hours / types / queue state
-        |     +-- user-owned data under RLS
+        +-- Supabase Data API / RLS
+        |     +-- canonical washes / hours / types
+        |     +-- queue state
+        |     +-- profiles
+        |     +-- user vehicles
+        |     +-- challenges / progress / points ledger
+        |     +-- favourites / alerts
         |
         +-- Supabase Realtime
         |     +-- queue estimate updates
+        |
+        +-- Supabase DB triggers / RPCs
+        |     +-- contribution rewards
+        |     +-- challenge progress
+        |     +-- self-scoped point totals / vehicle operations
         |
         +-- Supabase Edge Functions
               +-- queue validation/sessions
@@ -245,12 +335,12 @@ Directions --> Google Maps / Apple Maps on the user's device
 
 Main folders:
 
-- `src/domain` — ranking, queue estimation, confidence and config.
-- `src/services` — repositories, Supabase adapter, location/search/analytics.
+- `src/domain` — ranking, queue estimation, confidence, contributor levels/config.
+- `src/services` — repositories, Supabase adapter, search, auth/community services, analytics.
 - `src/components`, `src/pages` — UI.
-- `supabase/migrations` — schema/RLS/indexes/RPCs.
+- `supabase/migrations` — schema/RLS/indexes/RPCs/triggers.
 - `supabase/functions` — privileged actions/enrichment.
-- `scripts` — static postal/address index generators.
+- `scripts` — static postal/address-index generators.
 - `.github/workflows` — CI and Pages deployment.
 - `tests`, `e2e` — automated coverage.
 
@@ -258,39 +348,41 @@ Main folders:
 
 # Complete pull-request history
 
-This is the project change ledger for handoff. **Merged** means the PR entered `main`; **Closed / superseded** means it did not enter `main` and should not be revived unless doing historical investigation.
+This is the project change ledger. **Merged** means the PR entered `main`; **Closed / superseded** means it did not enter `main` and should not be restarted unless investigating history.
 
 | PR | Status | Change | What it means now |
 | --- | --- | --- | --- |
-| #1 — Clarify card timing and add quick queue reporting | Merged | Split Drive, Queue, Wash, Starts in and Done in; stopped showing unknown queue as zero; added quick `Share what you see` reporting. | Foundation of the current timing/quick-report UX. |
-| #2 — Fix queue report submission | Merged | Sent current position for proximity verification and showed real backend failures instead of false success; repaired service-role queue privileges. | Queue submission became trustworthy and location-aware. |
-| #3 — Add low-friction queue trust scoring | Merged | Added proximity/freshness weighting, remote-report caps, corroborated LIVE logic, soft dedupe and verified-session influence. | Core queue-trust model still applies. |
-| #4 — Configure WashRadar custom domain | Merged | Prepared `washradar.ca`, GitHub Pages base/CNAME and Supabase Edge Function CORS/auth origins. | `washradar.ca` is the primary production domain. |
-| #5 — Fix trust and accuracy gaps | Merged | Removed invented hours/false zero queues, penalized unknown data, refreshed freshness locally, and tightened GPS requirements for verified sessions. | Current UI should prefer unknown/limited-data states over guesses. |
-| #6 — Repair GTA catalogue enrichment and resume imports | Merged | Fixed hours parsing, made GTA catalogue ingestion resumable, re-enriched Place IDs and added coverage auditing. | Established the broad saved GTA wash catalogue and resumable admin ingestion. |
-| #7 — Add confidence-scored wash type truth engine | Merged | Added multi-source wash-type evidence, contributor reports, confidence rules and `wash-type-actions`. | Current wash-type classification should remain evidence/confidence based. |
-| #8 — Repair wash-type enrichment and simplify card actions | Merged | Repaired service-role enrichment permissions/restart behavior; simplified Directions and `Update queue` actions. | Current card action pattern and enrichment repair came from here. |
-| #9 — Make wash-type filters reflect verified nearby data | Merged | Made type chips use verified counts and disable zero-result categories. | Filters should reflect actual nearby verified data. |
-| #10 — Add interactive ad placement preview | Merged | Added hidden `/ad-preview` with fictional offers and viewability telemetry that does not affect ranking/production analytics. | Ads remain preview/foundation only; no live advertisers. |
-| #11 — Zero-cost routing and local address index foundation | Merged | Removed automatic Google Routes usage from normal browsing and added protected local-address-index groundwork. | First step toward the current zero-cost browsing architecture. |
-| #12 — Zero-cost routing and GTA address-search foundation | Merged | Reinforced distance + queue + wash-time UX, Maps-app Directions, and a zero-cost GTA address-search schema. | Current routing/cost philosophy is based on this. |
-| #13 — Add zero-cost GTA address autocomplete | Merged | Added first static GTA address autocomplete using Statistics Canada NAR and local city/postal fallback. Its Pages build later failed because the assumed NAR file shape was wrong. | Historical implementation only; its original failure is superseded by #14/#16. |
-| #14 — Fix zero-cost GTA address index build | Merged | Switched from the 1.5 GB NAR archive to Ontario ODA, added ODA parsing, GTA filtering, building dedupe and local centroids. | Became the practical static-address build path. |
-| #15 — Fix free GTA address index deployment | Closed / superseded | Attempted privacy/cost improvements but `main` advanced while it was in flight. | Do not revive; #16 reapplied the needed work cleanly. |
-| #16 — Finalize reliable zero-cost GTA address autocomplete | Merged | Finalized static Ontario ODA address chunks, non-blocking build behavior, hashed geocode cache and fallback-only Google geocoding. | Current street/house autocomplete architecture comes from this. |
-| #17 — Fix NAR address index generation | Closed / superseded | Experimental repair joining NAR address and location files by `LOC_GUID`. | Not needed after #16/ODA succeeded. |
-| #18 — Reduce ongoing Supabase usage | Merged | Coalesced Realtime refresh bursts, paused hidden-tab refreshes, batched analytics events, fixed analytics auth and updated the analytics Edge Function. | Current low-cost Supabase runtime behavior. |
-| #19 — Fix unified city, postal code and address search | Merged | Unified city/postal/address submit behavior, added visible Search button and kept Google fallback-only. | Restored a normal manual location-search flow. |
-| #20 — Fix GTA postal-code search reliably | Merged | Added an independent static postal/FSA search path using GeoNames and deployment validation. Initial `CA.zip` source proved incomplete for `M1X`. | Architecture retained, but dataset source was corrected by #21. |
-| #21 — Use full Canada postal dataset for GTA FSA search | Merged | Switched to `CA_full.csv.zip`, collapsed full postals to FSA centroids and made Pages fail unless `M1X` and a non-trivial FSA set exist. | Current production postal/FSA data source and validation. |
-| #22 — Prevent stale postal search on iPhone/PWA | Merged | Changed postal index loading away from stale `force-cache` behavior and bumped service-worker cache v3 → v4. | Current cache-update behavior for postal search/PWA clients. |
-| #23 — Refresh README to current production state | Merged | Replaced the stale PR #13 handoff with current architecture/status and explicit source-of-truth rules. | Established this README as the current handoff document. |
+| #1 — Clarify card timing and add quick queue reporting | Merged | Split timing concepts, stopped unknown queue from appearing as zero, added quick reporting. | Foundation of the timing/report UX. |
+| #2 — Fix queue report submission | Merged | Added proximity position and proper failure states; repaired backend privileges. | Queue submission became location-aware/trustworthy. |
+| #3 — Add low-friction queue trust scoring | Merged | Added proximity/freshness weighting, remote caps, consensus, dedupe and verified-session influence. | Core queue-trust model. |
+| #4 — Configure WashRadar custom domain | Merged | Added `washradar.ca` Pages/CORS/auth groundwork. | Production custom domain. |
+| #5 — Fix trust and accuracy gaps | Merged | Removed invented hours/false zero queues and strengthened unknown/GPS handling. | Unknown data remains unknown. |
+| #6 — Repair GTA catalogue enrichment and resume imports | Merged | Fixed hours parser and resumable GTA ingestion/enrichment. | Broad saved GTA wash catalogue. |
+| #7 — Add confidence-scored wash type truth engine | Merged | Added multi-source type evidence and confidence rules. | Current type-classification model. |
+| #8 — Repair wash-type enrichment and simplify card actions | Merged | Repaired enrichment and moved to the visible `Update queue` CTA. | Current contributor action pattern. |
+| #9 — Make wash-type filters reflect verified nearby data | Merged | Type chips use verified nearby counts. | Filters reflect actual data. |
+| #10 — Add interactive ad placement preview | Merged | Added `/ad-preview` with fictional offers/viewability. | Ads foundation only. |
+| #11 — Zero-cost routing and local address index foundation | Merged | Removed automatic Google Routes and added local address groundwork. | Start of zero-cost browsing path. |
+| #12 — Zero-cost routing and GTA address-search foundation | Merged | Reinforced distance/queue/wash UX + external Maps Directions. | Current routing/cost philosophy. |
+| #13 — Add zero-cost GTA address autocomplete | Merged | First static NAR address implementation; original Pages build later failed because NAR files needed joining. | Historical; superseded by #14/#16. |
+| #14 — Fix zero-cost GTA address index build | Merged | Switched practical build path to Ontario ODA. | Static address build foundation. |
+| #15 — Fix free GTA address index deployment | Closed / superseded | In-flight privacy/cost fix after main advanced. | Superseded by #16. |
+| #16 — Finalize reliable zero-cost GTA address autocomplete | Merged | Finalized ODA chunks, fallback geocoding privacy/cost behavior. | Current street-address architecture. |
+| #17 — Fix NAR address index generation | Closed / superseded | Experimental NAR `LOC_GUID` join repair. | Not current. |
+| #18 — Reduce ongoing Supabase usage | Merged | Coalesced Realtime updates, hidden-tab behavior and analytics batching. | Current low-cost runtime behavior. |
+| #19 — Fix unified city, postal code and address search | Merged | Unified manual location search and added explicit Search button. | Normal search-box behavior. |
+| #20 — Fix GTA postal-code search reliably | Merged | Added separate GeoNames postal/FSA path but initial `CA.zip` source lacked `M1X`. | Architecture retained; data source superseded by #21. |
+| #21 — Use full Canada postal dataset for GTA FSA search | Merged | Switched to full Canadian postal data and build validation. | Current postal/FSA source. |
+| #22 — Prevent stale postal search on iPhone/PWA | Merged | Revalidated postal data and bumped service-worker cache. | Current postal cache behavior. |
+| #23 — Refresh README to current production state | Merged | Replaced stale project handoff. | Established source-of-truth rules. |
+| #24 — Document complete pull-request history | Merged | Added full historical PR ledger. | Future sessions can understand superseded/current work. |
+| #25 — Add contributor profiles, Radar Challenges and My Cars | Merged | Added Profile v2, Radar Points/challenges, contribution history, private vehicles, reward security and contributor sign-in continuity attempt. | Current community/retention foundation in production. |
 
-## Superseded branches to avoid restarting
+## Superseded branches / paths to avoid restarting
 
 - **PR #15** — superseded by PR #16.
-- **PR #17** — experimental NAR repair; superseded by the ODA-based production path.
-- **PR #13's failed NAR deployment** — historical only; do not treat it as the current blocker.
-- **PR #20's `CA.zip` postal source** — superseded by PR #21's full Canadian postal dataset.
+- **PR #17** — experimental NAR repair; superseded by the ODA-based path.
+- **PR #13's failed NAR deployment** — historical only.
+- **PR #20's `CA.zip` source** — superseded by PR #21's full dataset.
 
-When continuing the project, always start from `main`, inspect the newest merged PRs and verify the latest Pages workflow before making changes.
+When continuing the project, always start from `main`, inspect newest merged PRs and verify the latest Pages workflow before making changes.
