@@ -26,31 +26,31 @@ jobs:
         uses: actions/cache@v4
         with:
           path: public/address-index
-          key: gta-address-index-202606-${{ hashFiles('scripts/build_gta_address_index.py') }}
+          key: gta-address-index-oda-on-v1-${{ hashFiles('scripts/build_gta_address_index.py') }}
 
-      - name: Restore Statistics Canada NAR source archive
+      - name: Restore Statistics Canada Ontario address source
         if: steps.address-index-cache.outputs.cache-hit != 'true'
-        id: nar-cache
+        id: address-source-cache
         uses: actions/cache@v4
         with:
-          path: .cache/nar
-          key: statcan-nar-202606
+          path: .cache/address-source
+          key: statcan-oda-on-v1
 
-      - name: Download Statistics Canada NAR June 2026
-        if: steps.address-index-cache.outputs.cache-hit != 'true' && steps.nar-cache.outputs.cache-hit != 'true'
+      - name: Download Statistics Canada Ontario Open Database of Addresses
+        if: steps.address-index-cache.outputs.cache-hit != 'true' && steps.address-source-cache.outputs.cache-hit != 'true'
         run: |
-          mkdir -p .cache/nar
+          mkdir -p .cache/address-source
           curl --fail --location --retry 5 --retry-delay 5 --connect-timeout 30 \
-            --output .cache/nar/202606.zip \
-            https://www150.statcan.gc.ca/n1/pub/46-26-0002/2022001/202606.zip
+            --output .cache/address-source/ODA_ON_v1.zip \
+            https://www150.statcan.gc.ca/n1/en/pub/46-26-0001/2021001/ODA_ON_v1.zip
 
       - name: Build zero-cost GTA address autocomplete index
         if: steps.address-index-cache.outputs.cache-hit != 'true'
         run: |
           python3 scripts/build_gta_address_index.py \
-            --zip .cache/nar/202606.zip \
+            --zip .cache/address-source/ODA_ON_v1.zip \
             --output public/address-index \
-            --release 202606
+            --release ODA-ON-v1
           cat public/address-index/manifest.json
 
       - name: Build static PWA
