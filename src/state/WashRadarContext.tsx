@@ -1,5 +1,6 @@
 import {createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode} from 'react';
 import {toast} from 'sonner';
+import {appConfig} from '../config/env';
 import {DEFAULT_FILTERS, QUEUE_CONFIG} from '../domain/config';
 import {distanceKm, rankWashes} from '../domain/engine';
 import type {
@@ -17,6 +18,7 @@ import {analytics, logger} from '../services/analytics';
 import {repository} from '../services';
 import {requestLocation} from '../services/location';
 import type {ContributionMetrics} from '../services/repository';
+import {loadQueueSignals} from '../services/scaleRefresh';
 
 type State = {
   mode: typeof repository.mode;
@@ -82,6 +84,7 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
   const [sort, setSort] = useState<SortMode>('Recommended');
   const [auth, setAuth] = useState({signedIn: false, email: null as string | null});
   const refreshVersion = useRef(0);
+  const activeWashIdsKey = useMemo(() => washes.map((wash) => wash.id).sort().join(','), [washes]);
 
   const refresh = useCallback(async () => {
     const version = ++refreshVersion.current;
@@ -135,11 +138,59 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
     }
   }, [filters.maximumDistanceKm, filters.types, locationReady, origin]);
 
+  // Queue changes are much more frequent than account/directory changes. At scale we
+  // refresh only the live signal feed for the washes already on screen instead of
+  // reloading the full directory, favourites, alerts, auth state and contributor stats.
+  const refreshQueueSignals = useCallback(async () => {
+    if (!locationReady || repository.mode !== 'supabase' || !activeWashIdsKey) return;
+    try {
+      const freshSignals = await loadQueueSignals(activeWashIdsKey.split(','));
+      setSignals(freshSignals);
+      setWashes((current) => current.length
+        ? rankWashes(current, freshSignals, origin, {preferredTypes: filters.types})
+        : current);
+    } catch (caught) {
+      logger.error(caught, {area: 'queue-refresh'});
+    }
+  }, [activeWashIdsKey, filters.types, locationReady, origin]);
+
   useEffect(() => {
     analytics.track('app_opened', {mode: repository.mode});
+  }, []);
+
+  // Full refreshes happen when the location/filter/account context actually changes.
+  useEffect(() => {
     void refresh();
-    return repository.subscribe(() => void refresh());
   }, [refresh]);
+
+  // Production defaults to visible-tab adaptive polling. This avoids holding a Realtime
+  // socket per browser and avoids the fan-out pattern where one queue change wakes every
+  // connected user. Realtime remains a config switch for smaller deployments/experiments.
+  useEffect(() => {
+    if (!locationReady) return;
+
+    if (repository.mode !== 'supabase') {
+      return repository.subscribe(() => void refresh());
+    }
+
+    if (appConfig.queueRefreshMode === 'realtime') {
+      return repository.subscribe(() => void refreshQueueSignals());
+    }
+
+    const intervalMs = appConfig.queuePollMs + Math.floor(Math.random() * 4_000);
+    const poll = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine) void refreshQueueSignals();
+    };
+    const timer = window.setInterval(poll, intervalMs);
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine) void refreshQueueSignals();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [locationReady, refresh, refreshQueueSignals]);
 
   useEffect(() => {
     localStorage.setItem('wr-filters-v2', JSON.stringify(filters));
