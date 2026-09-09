@@ -1,5 +1,5 @@
 import {Bell, CarFront, ChevronRight, Heart, HelpCircle, LogOut, ShieldCheck, Trophy, User, X} from 'lucide-react';
-import {useEffect, useMemo, useState, type FormEvent} from 'react';
+import {useEffect, useMemo, useState, type FormEvent, type ReactNode} from 'react';
 import {Link} from 'react-router-dom';
 import {toast} from 'sonner';
 import {contributorLevel, initials} from '../domain/community';
@@ -8,6 +8,7 @@ import {beginCommunitySignIn, signOutCommunity} from '../services/communityAuth'
 import {useCommunityAuth} from '../state/useCommunityAuth';
 import {useWashRadar} from '../state/WashRadarContext';
 import '../community.css';
+import '../account-drawer.css';
 
 type Props = {open: boolean; onClose: () => void};
 
@@ -125,6 +126,6 @@ export function ProfileDrawer({open, onClose}: Props) {
   </div>;
 }
 
-function DrawerLink({to, icon, title, detail, onClose}: {to: string; icon: React.ReactNode; title: string; detail: string; onClose: () => void}) {
+function DrawerLink({to, icon, title, detail, onClose}: {to: string; icon: ReactNode; title: string; detail: string; onClose: () => void}) {
   return <Link className="drawer-menu-item" to={to} onClick={onClose}><span className="drawer-menu-icon">{icon}</span><span><strong>{title}</strong><small>{detail}</small></span><ChevronRight size={18} /></Link>;
 }
