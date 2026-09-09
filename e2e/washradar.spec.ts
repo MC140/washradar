@@ -62,8 +62,8 @@ test('friends beta account UI is email/password only with stronger signup passwo
   await expect(page.getByRole('button', {name: 'Continue with Apple'})).toHaveCount(0);
   await expect(page.getByRole('tab', {name: 'Sign in'})).toBeVisible();
   await page.getByRole('tab', {name: 'Create account'}).click();
-  const password = page.getByLabel('Password');
-  const confirmation = page.getByLabel('Confirm password');
+  const password = page.getByLabel('Password', {exact: true});
+  const confirmation = page.getByLabel('Confirm password', {exact: true});
   await expect(password).toHaveAttribute('minlength', '12');
   await expect(confirmation).toHaveAttribute('minlength', '12');
   await expect(page.getByText(/unique 12\+ character password/i)).toBeVisible();
