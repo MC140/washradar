@@ -1,6 +1,9 @@
 import production from './production.json';
 const raw = import.meta.env;
 
+const queueRefreshMode = raw.VITE_QUEUE_REFRESH_MODE === 'realtime' ? 'realtime' : 'poll';
+const configuredPollMs = Number(raw.VITE_QUEUE_POLL_MS || 20_000);
+
 export const appConfig = {
   appName: raw.VITE_APP_NAME || 'WashRadar',
   basePath: raw.BASE_URL || '/',
@@ -12,6 +15,8 @@ export const appConfig = {
   mapAttribution: raw.VITE_MAP_ATTRIBUTION || '© OpenStreetMap contributors',
   supportEmail: raw.VITE_SUPPORT_EMAIL || 'support@washradar.ca',
   sentryDsn: raw.VITE_SENTRY_DSN || '',
+  queueRefreshMode,
+  queuePollMs: Math.min(60_000, Math.max(10_000, Number.isFinite(configuredPollMs) ? configuredPollMs : 20_000)),
 };
 
 export const hasSupabaseConfiguration = Boolean(appConfig.supabaseUrl && appConfig.supabasePublishableKey);
