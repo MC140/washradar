@@ -32,7 +32,7 @@ export function ReportModal({open, initialWash, onClose}: {open: boolean; initia
   const [message, setMessage] = useState('');
   const [failed, setFailed] = useState(false);
   const [selectedTypes, setSelectedTypes] = useState<WashType[]>([]);
-  const wash = useMemo(() => washes.find((item) => item.id === washId), [washId, washes]);
+  const wash = useMemo(() => washes.find((item) => item.id === washId) ?? (initialWash?.id === washId ? initialWash : undefined), [initialWash, washId, washes]);
   const initialWashId = initialWash?.id;
 
   useEffect(() => {
