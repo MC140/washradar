@@ -17,8 +17,10 @@ const LEVELS = [
 
 export function contributorLevel(points: number): ContributorLevel {
   const safePoints = Math.max(0, Math.floor(Number.isFinite(points) ? points : 0));
-  let index = LEVELS.findLastIndex((item) => safePoints >= item.floor);
-  if (index < 0) index = 0;
+  let index = 0;
+  for (let cursor = 0; cursor < LEVELS.length; cursor++) {
+    if (safePoints >= LEVELS[cursor].floor) index = cursor;
+  }
   const current = LEVELS[index];
   const next = LEVELS[index + 1];
   if (!next) {
