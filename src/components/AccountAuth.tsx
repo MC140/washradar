@@ -1,8 +1,10 @@
 import {KeyRound, Mail, ShieldCheck} from 'lucide-react';
-import {useState, type FormEvent} from 'react';
+import {useEffect, useState, type FormEvent} from 'react';
 import {toast} from 'sonner';
 import {
+  getAuthCapabilities,
   signInWithPassword,
+  signInWithSocial,
   signUpWithPassword,
 } from '../services/communityAuth';
 import '../auth.css';
@@ -14,7 +16,16 @@ export function AccountAuth({compact = false}: Props) {
   const [mode, setMode] = useState<Mode>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [googleAvailable, setGoogleAvailable] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void getAuthCapabilities().then((capabilities) => {
+      if (active) setGoogleAvailable(capabilities.google);
+    });
+    return () => { active = false; };
+  }, []);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -38,7 +49,24 @@ export function AccountAuth({compact = false}: Props) {
     }
   };
 
+  const googleSignIn = async () => {
+    setBusy(true);
+    try {
+      await signInWithSocial('google');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Google sign-in is unavailable.');
+      setBusy(false);
+    }
+  };
+
   return <div className={'account-auth' + (compact ? ' compact' : '')}>
+    {googleAvailable && <>
+      <div className="account-auth-social">
+        <button type="button" className="social-auth-button" disabled={busy} onClick={() => void googleSignIn()}><span className="google-mark" aria-hidden="true">G</span> Continue with Google</button>
+      </div>
+      <div className="auth-divider"><span>or use email</span></div>
+    </>}
+
     <div className="auth-tabs" role="tablist" aria-label="Email account options">
       <button type="button" role="tab" aria-selected={mode === 'signin'} className={mode === 'signin' ? 'active' : ''} onClick={() => setMode('signin')}>Sign in</button>
       <button type="button" role="tab" aria-selected={mode === 'signup'} className={mode === 'signup' ? 'active' : ''} onClick={() => setMode('signup')}>Create account</button>
