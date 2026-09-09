@@ -1,0 +1,33 @@
+name: Production scale smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      concurrency:
+        description: Concurrent read workers (1-100)
+        required: true
+        default: '20'
+      requests:
+        description: Total nearby-wash read requests (max 2000)
+        required: true
+        default: '200'
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Run production read smoke
+        env:
+          CONCURRENCY: ${{ inputs.concurrency }}
+          REQUESTS: ${{ inputs.requests }}
+          MAX_ERROR_RATE: '0.01'
+          MAX_P95_MS: '2000'
+        run: node scripts/scale_smoke.mjs
