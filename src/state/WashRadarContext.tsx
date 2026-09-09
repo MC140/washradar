@@ -115,6 +115,10 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
         repository.metrics(),
       ]);
       if (version !== refreshVersion.current) return;
+
+      // Normal browsing intentionally uses only local distance + WashRadar queue data.
+      // Traffic-aware navigation is delegated to the user's Maps app after Directions is tapped.
+      // This keeps Google Routes usage at zero while preserving the core queue decision experience.
       setWashes(rankWashes(rawWashes, freshSignals, origin, {preferredTypes: filters.types}));
       setSignals(freshSignals);
       setFavourites(favouriteIds);
@@ -123,11 +127,6 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
       setAuth(authState);
       setMetrics(contributionMetrics);
       setError('');
-      void repository.routeTimes(origin, rawWashes).then((routeMinutes) => {
-        if (version === refreshVersion.current && Object.keys(routeMinutes).length) {
-          setWashes(rankWashes(rawWashes, freshSignals, origin, {preferredTypes: filters.types, routeMinutes}));
-        }
-      });
     } catch (caught) {
       logger.error(caught, {area: 'refresh'});
       setError(caught instanceof Error ? caught.message : 'Wash data is temporarily unavailable.');
@@ -163,13 +162,9 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
   useEffect(() => {
     if (!locationReady) return;
     const timer = window.setInterval(() => {
-      setWashes((current) => {
-        if (!current.length) return current;
-        const routeMinutes = Object.fromEntries(current
-          .filter((wash) => wash.driveTimeSource === 'ROUTE')
-          .map((wash) => [wash.id, wash.driveMinutes]));
-        return rankWashes(current, signals, origin, {preferredTypes: filters.types, routeMinutes}, new Date());
-      });
+      setWashes((current) => current.length
+        ? rankWashes(current, signals, origin, {preferredTypes: filters.types}, new Date())
+        : current);
     }, 60_000);
     return () => window.clearInterval(timer);
   }, [filters.types, locationReady, origin, signals]);
