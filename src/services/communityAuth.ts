@@ -31,11 +31,8 @@ export function normalizeAuthEmail(email: string) {
 }
 
 function assertPassword(password: string) {
-  if (password.length < 12) throw new Error('Use at least 12 characters for your password.');
+  if (password.length < 8) throw new Error('Use at least 8 characters for your password.');
   if (password.length > 128) throw new Error('Password is too long.');
-  if (!/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/\d/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
-    throw new Error('Use uppercase and lowercase letters, a number, and a symbol in your password.');
-  }
 }
 
 function cooldownKey(email: string) {
@@ -62,9 +59,16 @@ function assertCanSend(email: string) {
   if (seconds > 0) throw new Error(`An account email was just requested. Please wait ${seconds}s before asking for another.`);
 }
 
+function setCooldownFromAuthEmail(email: string) {
+  setCooldown(email);
+}
+
 function emailAuthError(error: unknown, email: string) {
   const message = error instanceof Error ? error.message : String(error ?? '');
   const lower = message.toLowerCase();
+  if (lower.includes('email address not authorized')) {
+    return new Error('Public account email delivery is not configured for this beta yet.');
+  }
   if (lower.includes('rate limit') || lower.includes('too many requests') || lower.includes('429')) {
     setCooldown(email, RATE_LIMIT_COOLDOWN_MS);
     return new Error('Too many account emails were requested. Please wait a few minutes and use the newest WashRadar email if one already arrived.');
@@ -76,10 +80,10 @@ function passwordAuthError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error ?? '');
   const lower = message.toLowerCase();
   if (lower.includes('invalid login credentials') || lower.includes('invalid credentials')) {
-    return new Error('Email or password is incorrect. If you previously used an email sign-in link, choose “Forgot / create password” once to set a password.');
+    return new Error('Email or password is incorrect.');
   }
   if (lower.includes('email not confirmed') || lower.includes('email_not_confirmed')) {
-    return new Error('Verify your email first, then sign in with your password.');
+    return new Error('This account is waiting for email verification. Friends-beta accounts should not require verification once the beta auth setting is updated.');
   }
   if (lower.includes('rate limit') || lower.includes('too many requests') || lower.includes('429')) {
     return new Error('Too many sign-in attempts. Please wait a few minutes and try again.');
@@ -197,12 +201,13 @@ export async function signUpWithPassword(email: string, password: string) {
     options: {emailRedirectTo: authRedirectUrl('signup')},
   });
   if (error) throw emailAuthError(error, normalized);
-  setCooldown(normalized);
 
   if (data.session) {
     await adoptSession(data.session);
     return {confirmationRequired: false};
   }
+
+  setCooldownFromAuthEmail(normalized);
   return {confirmationRequired: true};
 }
 
