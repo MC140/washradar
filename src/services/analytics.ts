@@ -79,7 +79,11 @@ class AnalyticsService {
       await fetch(appConfig.supabaseUrl + '/functions/v1/analytics-events', {
         method: 'POST',
         keepalive: true,
-        headers: {'Content-Type': 'application/json', apikey: appConfig.supabasePublishableKey},
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: appConfig.supabasePublishableKey,
+          Authorization: 'Bearer ' + appConfig.supabasePublishableKey,
+        },
         body: JSON.stringify({clientId: this.clientId(), events}),
       });
     } catch {
