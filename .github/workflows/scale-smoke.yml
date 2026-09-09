@@ -11,6 +11,10 @@ on:
         description: Total nearby-wash read requests (max 2000)
         required: true
         default: '200'
+  push:
+    branches: [main]
+    paths:
+      - '.github/scale-smoke-trigger'
 
 permissions:
   contents: read
