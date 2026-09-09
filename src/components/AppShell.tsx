@@ -6,6 +6,7 @@ import {useWashRadar} from '../state/WashRadarContext';
 import {ProfileDrawer} from './ProfileDrawer';
 import {QueueSessionBanner} from './QueueSessionBanner';
 import {ReportModal} from './ReportModal';
+import '../mobile-account.css';
 
 const mobileNavigation = [
   {to: '/', label: 'Explore', icon: Compass},
