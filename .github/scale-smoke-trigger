@@ -1,0 +1,1 @@
+2026-09-09 PR30 post-deploy validation: 20 concurrent workers / 200 read-only nearby-wash requests.
