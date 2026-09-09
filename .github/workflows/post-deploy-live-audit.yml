@@ -1,0 +1,43 @@
+name: Post-deploy production audit
+
+on:
+  workflow_run:
+    workflows: ["Deploy WashRadar to GitHub Pages"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: post-deploy-production-audit
+  cancel-in-progress: true
+
+jobs:
+  live-user-journeys:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run production read-only user journeys
+        run: npx playwright test --config=playwright.live.config.ts
+      - name: Upload production audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-user-journey-audit
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 7
