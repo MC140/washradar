@@ -48,3 +48,8 @@ export async function beginCommunitySignIn(email: string) {
   if (error) throw new Error(error.message);
   return {preservesContributorId: false, alreadySignedIn: false};
 }
+
+export async function signOutCommunity() {
+  const {error} = await client.auth.signOut();
+  if (error) throw new Error(error.message);
+}
