@@ -1,7 +1,9 @@
 import {Bell, Compass, Heart, MapPin, Plus, Radar, Trophy, User} from 'lucide-react';
-import {useEffect, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {Link, NavLink, Outlet} from 'react-router-dom';
+import {useCommunityAuth} from '../state/useCommunityAuth';
 import {useWashRadar} from '../state/WashRadarContext';
+import {ProfileDrawer} from './ProfileDrawer';
 import {QueueSessionBanner} from './QueueSessionBanner';
 import {ReportModal} from './ReportModal';
 
@@ -13,15 +15,26 @@ const mobileNavigation = [
 ];
 
 export function AppShell() {
-  const {locationLabel, locationReady, locate, alerts} = useWashRadar();
+  const {locationLabel, locationReady, locate, alerts, refresh} = useWashRadar();
+  const communityAuth = useCommunityAuth();
   const [reportOpen, setReportOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   const [updateReady, setUpdateReady] = useState(false);
+  const syncedAuth = useRef<boolean | null>(null);
   const hasTriggeredAlert = alerts.some((entry) => Boolean(entry.triggeredAt));
+
   useEffect(() => {
     const ready = () => setUpdateReady(true);
     window.addEventListener('washradar:update-ready', ready);
     return () => window.removeEventListener('washradar:update-ready', ready);
   }, []);
+
+  useEffect(() => {
+    if (!communityAuth.ready || syncedAuth.current === communityAuth.signedIn) return;
+    syncedAuth.current = communityAuth.signedIn;
+    void refresh();
+  }, [communityAuth.ready, communityAuth.signedIn, refresh]);
+
   return (
     <>
       <a href="#main-content" className="skip-link">Skip to main content</a>
@@ -36,7 +49,7 @@ export function AppShell() {
         </nav>
         <button className="location-button" onClick={() => void locate()}><MapPin size={16} /><span>{locationLabel}</span><small>{locationReady ? 'Change' : 'Set'}</small></button>
         <NavLink className="profile-link header-alert-link" to="/alerts" aria-label="Alerts"><Bell size={19} />{hasTriggeredAlert && <i />}</NavLink>
-        <NavLink className="profile-link" to="/profile" aria-label="Profile"><User size={19} /></NavLink>
+        <button className={'profile-link account-menu-trigger ' + (communityAuth.signedIn ? 'signed-in' : '')} type="button" onClick={() => setAccountOpen(true)} aria-label="Open account menu" aria-expanded={accountOpen}><User size={19} />{communityAuth.signedIn && <i />}</button>
       </header>
       <QueueSessionBanner />
       {updateReady && <div className="update-banner" role="status">A fresh version is ready.<button onClick={() => window.location.reload()}>Update</button></div>}
@@ -57,6 +70,7 @@ export function AppShell() {
         {mobileNavigation.slice(2).map((item) => <NavItem key={item.to} {...item} />)}
       </nav>
       <ReportModal open={reportOpen} onClose={() => setReportOpen(false)} />
+      <ProfileDrawer open={accountOpen} onClose={() => setAccountOpen(false)} />
     </>
   );
 }
