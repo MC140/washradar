@@ -1,11 +1,15 @@
-import type {Session} from '@supabase/supabase-js';
+import {createClient, type Provider, type Session} from '@supabase/supabase-js';
 import {appConfig} from '../config/env';
 import {supabaseClient as client} from './supabaseClient';
 
 export type CommunityAuthState = {signedIn: boolean; email: string | null};
+export type AuthCapabilities = {email: boolean; google: boolean; apple: boolean};
+export type SocialProvider = 'google' | 'apple';
 
 const EMAIL_SEND_COOLDOWN_MS = 60_000;
 const RATE_LIMIT_COOLDOWN_MS = 5 * 60_000;
+const MERGE_CLAIM_KEY = 'wr-auth-merge-claim';
+let capabilityPromise: Promise<AuthCapabilities> | null = null;
 
 function stateFromSession(session: Session | null): CommunityAuthState {
   const user = session?.user;
@@ -15,21 +19,24 @@ function stateFromSession(session: Session | null): CommunityAuthState {
   };
 }
 
-function authRedirectUrl() {
+function authRedirectUrl(mode: 'signup' | 'recovery' | 'oauth' = 'signup') {
   const basePath = appConfig.basePath === '/' ? '' : appConfig.basePath.replace(/\/$/, '');
-  return new URL(`${basePath}/auth/confirm`, window.location.origin).toString();
+  const url = new URL(`${basePath}/auth/confirm`, window.location.origin);
+  url.searchParams.set('mode', mode);
+  return url.toString();
 }
 
-function normalizeEmail(email: string) {
+export function normalizeAuthEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
-function cooldownKey(email: string) {
-  return `wr-auth-email-cooldown:${normalizeEmail(email)}`;
+function assertPassword(password: string) {
+  if (password.length < 8) throw new Error('Use at least 8 characters for your password.');
+  if (password.length > 128) throw new Error('Password is too long.');
 }
 
-function existingAccountFallbackKey(email: string) {
-  return `wr-auth-email-existing:${normalizeEmail(email)}`;
+function cooldownKey(email: string) {
+  return `wr-auth-email-cooldown:${normalizeAuthEmail(email)}`;
 }
 
 function setCooldown(email: string, duration = EMAIL_SEND_COOLDOWN_MS) {
@@ -37,7 +44,7 @@ function setCooldown(email: string, duration = EMAIL_SEND_COOLDOWN_MS) {
 }
 
 export function getSignInCooldownSeconds(email: string) {
-  const normalized = normalizeEmail(email);
+  const normalized = normalizeAuthEmail(email);
   if (!normalized) return 0;
   const until = Number(localStorage.getItem(cooldownKey(normalized)) ?? 0);
   if (!Number.isFinite(until) || until <= Date.now()) {
@@ -49,76 +56,196 @@ export function getSignInCooldownSeconds(email: string) {
 
 function assertCanSend(email: string) {
   const seconds = getSignInCooldownSeconds(email);
-  if (seconds > 0) throw new Error(`A sign-in email was just requested. Please wait ${seconds}s before asking for another.`);
+  if (seconds > 0) throw new Error(`An account email was just requested. Please wait ${seconds}s before asking for another.`);
 }
 
-function authError(error: unknown, email: string) {
+function emailAuthError(error: unknown, email: string) {
   const message = error instanceof Error ? error.message : String(error ?? '');
   const lower = message.toLowerCase();
   if (lower.includes('rate limit') || lower.includes('too many requests') || lower.includes('429')) {
     setCooldown(email, RATE_LIMIT_COOLDOWN_MS);
-    return new Error('Too many sign-in emails were requested. Please wait a few minutes. If a WashRadar email already arrived, use the newest link instead of requesting another.');
+    return new Error('Too many account emails were requested. Please wait a few minutes and use the newest WashRadar email if one already arrived.');
+  }
+  return new Error(message || 'Account email is temporarily unavailable.');
+}
+
+function passwordAuthError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  const lower = message.toLowerCase();
+  if (lower.includes('invalid login credentials') || lower.includes('invalid credentials')) {
+    return new Error('Email or password is incorrect. If you previously used an email sign-in link, choose “Forgot / create password” once to set a password.');
+  }
+  if (lower.includes('email not confirmed') || lower.includes('email_not_confirmed')) {
+    return new Error('Verify your email first, then sign in with your password.');
+  }
+  if (lower.includes('rate limit') || lower.includes('too many requests') || lower.includes('429')) {
+    return new Error('Too many sign-in attempts. Please wait a few minutes and try again.');
   }
   return new Error(message || 'Sign-in is temporarily unavailable.');
 }
 
-function emailAlreadyRegistered(error: unknown) {
-  const message = error instanceof Error ? error.message.toLowerCase() : String(error ?? '').toLowerCase();
-  return message.includes('already registered') || message.includes('already exists') || message.includes('email exists') || message.includes('user already exists');
+function socialAuthError(error: unknown, provider: SocialProvider) {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  const lower = message.toLowerCase();
+  if (lower.includes('provider is not enabled') || lower.includes('unsupported provider')) {
+    return new Error(`${provider === 'google' ? 'Google' : 'Apple'} sign-in is not configured yet.`);
+  }
+  return new Error(message || `${provider === 'google' ? 'Google' : 'Apple'} sign-in is temporarily unavailable.`);
+}
+
+function probeClient() {
+  return createClient(appConfig.supabaseUrl, appConfig.supabasePublishableKey, {
+    auth: {persistSession: false, autoRefreshToken: false, detectSessionInUrl: false},
+  });
+}
+
+async function prepareAnonymousMerge() {
+  const {data: {session}} = await client.auth.getSession();
+  if (!session?.user?.is_anonymous) return null;
+  const {data, error} = await client.rpc('prepare_anonymous_contribution_merge');
+  if (error) throw new Error('Your guest contribution history could not be prepared safely. Please try again.');
+  const token = typeof data === 'string' ? data : null;
+  if (token) localStorage.setItem(MERGE_CLAIM_KEY, token);
+  return token;
+}
+
+export async function claimPendingAnonymousContributions() {
+  const token = localStorage.getItem(MERGE_CLAIM_KEY);
+  if (!token) return false;
+  const {data: {session}} = await client.auth.getSession();
+  if (!session?.user || session.user.is_anonymous) return false;
+  const {error} = await client.rpc('claim_anonymous_contributions', {p_claim_token: token});
+  if (error) {
+    const lower = error.message.toLowerCase();
+    if (lower.includes('invalid or expired') || lower.includes('claim is invalid')) localStorage.removeItem(MERGE_CLAIM_KEY);
+    else console.warn('WashRadar contributor-history merge will retry.', error.message);
+    return false;
+  }
+  localStorage.removeItem(MERGE_CLAIM_KEY);
+  return true;
+}
+
+async function adoptSession(session: Session) {
+  const {error} = await client.auth.setSession({access_token: session.access_token, refresh_token: session.refresh_token});
+  if (error) throw new Error(error.message);
+  await claimPendingAnonymousContributions();
 }
 
 export async function getCommunityAuthState(): Promise<CommunityAuthState> {
   const {data: {session}} = await client.auth.getSession();
+  if (session?.user && !session.user.is_anonymous) void claimPendingAnonymousContributions();
   return stateFromSession(session);
 }
 
 export function subscribeCommunityAuth(onChange: (state: CommunityAuthState) => void) {
   const {data: {subscription}} = client.auth.onAuthStateChange((_event, session) => {
     onChange(stateFromSession(session));
+    if (session?.user && !session.user.is_anonymous) setTimeout(() => void claimPendingAnonymousContributions(), 0);
   });
   return () => subscription.unsubscribe();
 }
 
-export async function beginCommunitySignIn(email: string) {
-  const normalized = normalizeEmail(email);
+export async function getAuthCapabilities(): Promise<AuthCapabilities> {
+  if (capabilityPromise) return capabilityPromise;
+  capabilityPromise = (async () => {
+    if (!appConfig.supabaseUrl || !appConfig.supabasePublishableKey) return {email: false, google: false, apple: false};
+    try {
+      const response = await fetch(`${appConfig.supabaseUrl}/auth/v1/settings`, {
+        headers: {apikey: appConfig.supabasePublishableKey},
+      });
+      if (!response.ok) throw new Error('Auth settings unavailable.');
+      const settings = await response.json() as {external?: Record<string, boolean>};
+      return {
+        email: settings.external?.email !== false,
+        google: settings.external?.google === true,
+        apple: settings.external?.apple === true,
+      };
+    } catch {
+      // Email/password is enabled by default in hosted Supabase. Keep the core login available if
+      // capability discovery is temporarily blocked; social buttons remain hidden until confirmed.
+      return {email: true, google: false, apple: false};
+    }
+  })();
+  return capabilityPromise;
+}
+
+export async function signInWithPassword(email: string, password: string) {
+  const normalized = normalizeAuthEmail(email);
   if (!normalized) throw new Error('Enter your email address.');
-  const redirectTo = authRedirectUrl();
-  const {data: {session}} = await client.auth.getSession();
+  if (!password) throw new Error('Enter your password.');
 
-  if (session?.user && !session.user.is_anonymous) {
-    if (session.user.email?.toLowerCase() === normalized) {
-      return {preservesContributorId: true, alreadySignedIn: true};
-    }
-    throw new Error('Sign out before switching to a different email address.');
-  }
+  await prepareAnonymousMerge();
+  const auth = probeClient();
+  const {data, error} = await auth.auth.signInWithPassword({email: normalized, password});
+  if (error || !data.session) throw passwordAuthError(error);
+  await adoptSession(data.session);
+  return {email: data.user.email ?? normalized};
+}
 
+export async function signUpWithPassword(email: string, password: string) {
+  const normalized = normalizeAuthEmail(email);
+  if (!normalized) throw new Error('Enter your email address.');
+  assertPassword(password);
   assertCanSend(normalized);
+  await prepareAnonymousMerge();
 
-  if (session?.user?.is_anonymous && localStorage.getItem(existingAccountFallbackKey(normalized)) !== 'true') {
-    const {error: upgradeError} = await client.auth.updateUser({email: normalized}, {emailRedirectTo: redirectTo});
-    if (!upgradeError) {
-      setCooldown(normalized);
-      return {preservesContributorId: true, alreadySignedIn: false};
-    }
-
-    if (emailAlreadyRegistered(upgradeError)) {
-      localStorage.setItem(existingAccountFallbackKey(normalized), 'true');
-      throw new Error('That email already has a WashRadar account. Tap Continue with email once more to sign in to that existing account.');
-    }
-
-    throw authError(upgradeError, normalized);
-  }
-
-  const {error} = await client.auth.signInWithOtp({
+  // Use a non-persistent auth client so a pending/failed signup never destroys the current guest
+  // contributor session. If confirmation is required, the guest remains intact until the link returns.
+  const auth = probeClient();
+  const {data, error} = await auth.auth.signUp({
     email: normalized,
-    options: {emailRedirectTo: redirectTo, shouldCreateUser: true},
+    password,
+    options: {emailRedirectTo: authRedirectUrl('signup')},
   });
-  if (error) throw authError(error, normalized);
+  if (error) throw emailAuthError(error, normalized);
   setCooldown(normalized);
-  return {preservesContributorId: false, alreadySignedIn: false};
+
+  if (data.session) {
+    await adoptSession(data.session);
+    return {confirmationRequired: false};
+  }
+  return {confirmationRequired: true};
+}
+
+export async function requestPasswordReset(email: string) {
+  const normalized = normalizeAuthEmail(email);
+  if (!normalized) throw new Error('Enter your email address first.');
+  assertCanSend(normalized);
+  await prepareAnonymousMerge();
+  const {error} = await client.auth.resetPasswordForEmail(normalized, {redirectTo: authRedirectUrl('recovery')});
+  if (error) throw emailAuthError(error, normalized);
+  setCooldown(normalized);
+}
+
+export async function updateAccountPassword(password: string) {
+  assertPassword(password);
+  const {data: {session}} = await client.auth.getSession();
+  if (!session?.user || session.user.is_anonymous) throw new Error('Open the newest WashRadar recovery email first.');
+  const {error} = await client.auth.updateUser({password});
+  if (error) throw new Error(error.message || 'Password could not be updated.');
+  await claimPendingAnonymousContributions();
+}
+
+export async function signInWithSocial(provider: SocialProvider) {
+  const capabilities = await getAuthCapabilities();
+  if (!capabilities[provider]) throw new Error(`${provider === 'google' ? 'Google' : 'Apple'} sign-in is not configured yet.`);
+  await prepareAnonymousMerge();
+  const {error} = await client.auth.signInWithOAuth({
+    provider: provider as Provider,
+    options: {redirectTo: authRedirectUrl('oauth')},
+  });
+  if (error) throw socialAuthError(error, provider);
+}
+
+// Kept only for the legacy repository interface. Magic-link login is intentionally no longer part
+// of the WashRadar account model; normal login uses password/social, with email only for verification/recovery.
+export async function beginCommunitySignIn(email: string): Promise<never> {
+  if (!normalizeAuthEmail(email)) throw new Error('Enter your email address.');
+  throw new Error('Use email + password, Google, or Apple to sign in.');
 }
 
 export async function signOutCommunity() {
+  localStorage.removeItem(MERGE_CLAIM_KEY);
   const {error} = await client.auth.signOut();
   if (error) throw new Error(error.message);
 }

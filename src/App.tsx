@@ -6,6 +6,7 @@ import {WashRadarProvider} from './state/WashRadarContext';
 import {AdPreviewPage} from './pages/AdPreviewPage';
 import {AdminPage} from './pages/AdminPage';
 import {AlertsPage} from './pages/AlertsPage';
+import {AuthConfirmPage} from './pages/AuthConfirmPage';
 import {ChallengesPage} from './pages/ChallengesPage';
 import {ExplorePage} from './pages/ExplorePage';
 import {LegalPage} from './pages/LegalPage';
@@ -29,7 +30,7 @@ export default function App() {
     <Route path="challenges" element={<ChallengesPage />} />
     <Route path="vehicles" element={<VehiclesPage />} />
     <Route path="profile" element={<ProfilePage />} />
-    <Route path="auth/confirm" element={<ProfilePage />} />
+    <Route path="auth/confirm" element={<AuthConfirmPage />} />
     <Route path="privacy" element={<LegalPage page="privacy" />} />
     <Route path="terms" element={<LegalPage page="terms" />} />
     <Route path="sponsored" element={<LegalPage page="sponsored" />} />

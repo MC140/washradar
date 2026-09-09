@@ -1,12 +1,13 @@
 import {Bell, CarFront, ChevronRight, Heart, HelpCircle, LogOut, ShieldCheck, Trophy, User, X} from 'lucide-react';
-import {useEffect, useMemo, useState, type FormEvent, type ReactNode} from 'react';
+import {useEffect, useMemo, useState, type ReactNode} from 'react';
 import {Link} from 'react-router-dom';
 import {toast} from 'sonner';
 import {contributorLevel, initials} from '../domain/community';
-import {beginCommunitySignIn, signOutCommunity} from '../services/communityAuth';
+import {signOutCommunity} from '../services/communityAuth';
 import {getCommunitySummary, type CommunitySummary} from '../services/communitySummary';
 import {useCommunityAuth} from '../state/useCommunityAuth';
 import {useWashRadar} from '../state/WashRadarContext';
+import {AccountAuth} from './AccountAuth';
 import '../community.css';
 import '../account-drawer.css';
 
@@ -16,7 +17,6 @@ export function ProfileDrawer({open, onClose}: Props) {
   const auth = useCommunityAuth();
   const {refresh} = useWashRadar();
   const [summary, setSummary] = useState<CommunitySummary | null>(null);
-  const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -47,20 +47,6 @@ export function ProfileDrawer({open, onClose}: Props) {
 
   const name = summary?.displayName || (auth.signedIn ? 'Your WashRadar' : 'Hi there!');
   const avatarText = initials(summary?.displayName, summary?.email ?? auth.email);
-
-  const signIn = async (event: FormEvent) => {
-    event.preventDefault();
-    setBusy(true);
-    try {
-      const result = await beginCommunitySignIn(email);
-      if (result.alreadySignedIn) toast.success('You are already signed in.');
-      else toast.success(result.preservesContributorId ? 'Check your email once to keep your contributor history.' : 'Check your email for your secure first sign-in link.');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Sign-in is unavailable.');
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const signOut = async () => {
     setBusy(true);
@@ -113,11 +99,7 @@ export function ProfileDrawer({open, onClose}: Props) {
         <button className="drawer-signout" disabled={busy} onClick={() => void signOut()}><LogOut size={18} /> Sign out</button>
       </> : <>
         <div className="drawer-signin-intro"><div className="drawer-avatar guest"><User size={27} /></div><div><strong>Sign in / create account</strong><span>Keep your profile, points, cars and contributions together.</span></div></div>
-        <form className="drawer-signin-form" onSubmit={signIn}>
-          <label>Email address<input type="email" required autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></label>
-          <button className="primary-button" disabled={busy}>{busy ? 'Sending…' : 'Continue with email'}</button>
-        </form>
-        <p className="drawer-auth-note"><ShieldCheck size={16} /> You verify your email on first sign-in. This device then stays signed in across refreshes until you sign out.</p>
+        <AccountAuth compact />
         <div className="drawer-section-title">BROWSE WITHOUT AN ACCOUNT</div>
         <nav className="drawer-menu compact">
           <DrawerLink to="/saved" icon={<Heart />} title="Saved" detail="Local favourites still work" onClose={onClose} />

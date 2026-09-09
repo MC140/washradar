@@ -3,9 +3,10 @@ import {useEffect, useMemo, useState} from 'react';
 import type {FormEvent} from 'react';
 import {Link} from 'react-router-dom';
 import {toast} from 'sonner';
+import {AccountAuth} from '../components/AccountAuth';
 import {contributorLevel, initials} from '../domain/community';
 import {getCommunityDashboard, saveCommunityProfile, type CommunityDashboard} from '../services/community';
-import {beginCommunitySignIn, signOutCommunity} from '../services/communityAuth';
+import {signOutCommunity} from '../services/communityAuth';
 import {useCommunityAuth} from '../state/useCommunityAuth';
 import {useWashRadar} from '../state/WashRadarContext';
 import '../community.css';
@@ -13,7 +14,6 @@ import '../community.css';
 export function ProfilePage() {
   const {metrics, mode, refresh} = useWashRadar();
   const auth = useCommunityAuth();
-  const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
   const [dashboard, setDashboard] = useState<CommunityDashboard | null>(null);
   const [editing, setEditing] = useState(false);
@@ -50,9 +50,8 @@ export function ProfilePage() {
   if (!auth.ready) return <section className="community-page"><div className="panel community-loading">Restoring your WashRadar profile…</div></section>;
 
   if (!auth.signedIn) return <section className="profile-layout"><div className="panel profile-main"><span className="profile-icon"><User size={25} /></span><p className="eyebrow">YOUR WASHRADAR</p><h1>Build a contributor identity.</h1><p>Explore without an account. Sign in when you want a profile, Radar Points, challenge progress, vehicles, saved washes and contribution history across devices.</p>
-    <form className="magic-link-form" onSubmit={async (event) => {event.preventDefault(); setBusy(true); try {const result = await beginCommunitySignIn(email); if (result.alreadySignedIn) toast.success('You are already signed in on this device.'); else toast.success(result.preservesContributorId ? 'Check your email once to attach this contributor history to your account.' : 'Check your email for your secure first sign-in link.');} catch (error) {toast.error(error instanceof Error ? error.message : 'Sign-in is unavailable.');} finally {setBusy(false);}}}><label>Email address<input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></label><button className="primary-button" disabled={busy}>{busy ? 'Sending…' : 'Continue with email'}</button></form>
-    <p className="signin-persistence-note"><ShieldCheck size={16} /> First sign-in verifies your email. After that, this device stays signed in across refreshes and pages until you choose Sign out.</p>
-    {mode === 'demo' && <p className="demo-auth-note">Email is intentionally disabled in demo mode. Connect the production Supabase project to enable email sign-in.</p>}
+    <AccountAuth />
+    {mode === 'demo' && <p className="demo-auth-note">Account sign-in is intentionally disabled in demo mode. Connect the production Supabase project to enable accounts.</p>}
     <div className="profile-signin-benefits"><span><Trophy /> Challenges & Radar Points</span><span><CarFront /> Private My Cars garage</span><span><BarChart3 /> Contribution history</span></div>
   </div><aside><div className="panel privacy-panel"><ShieldCheck /><h2>Low friction, private by design.</h2><p>WashRadar stores proximity verification for trust, not a public location trail. Your saved vehicles and profile account data stay private to your account.</p></div></aside></section>;
 
