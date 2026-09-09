@@ -1,4 +1,4 @@
-import {Car, Clock3, Droplets, Heart, MapPin, Navigation, ShieldCheck, Star} from 'lucide-react';
+import {Clock3, Droplets, Heart, MapPin, Navigation, ShieldCheck, Star} from 'lucide-react';
 import {Link} from 'react-router-dom';
 import {WASH_TYPE_CONFIG} from '../domain/config';
 import {hasQueueEvidence, startingPrice} from '../domain/engine';
@@ -27,8 +27,6 @@ export function WashCard({
   const unavailable = status === 'closed' || status === 'unavailable';
   const hasQueueData = hasQueueEvidence(wash, wash.estimate);
   const queueMinutes = !unavailable && hasQueueData ? wash.estimate.waitMinutes : null;
-  const startsInMinutes = queueMinutes === null ? null : wash.driveMinutes + queueMinutes;
-  const doneInMinutes = startsInMinutes === null ? null : startsInMinutes + wash.estimatedWashMinutes;
   const estimatedPrefix = wash.estimate.dataState === 'ESTIMATED' ? '~' : '';
   const price = startingPrice(wash);
   const queueTone = unavailable || queueMinutes === null ? '' : queueMinutes <= 10 ? 'short' : queueMinutes <= 25 ? 'moderate' : 'long';
@@ -57,7 +55,7 @@ export function WashCard({
           }}>
             <h2>{wash.name}</h2>
           </Link>
-          <p><MapPin size={14} /> {wash.address} · {wash.distanceKm.toFixed(1)} km</p>
+          <p><MapPin size={14} /> {wash.address} · {wash.distanceKm.toFixed(1)} km away</p>
         </div>
         <div className={'queue-number ' + queueTone}>
           <button className="quick-directions" onClick={directions} aria-label={'Get directions to ' + wash.name}><Navigation size={13} /> Directions</button>
@@ -75,14 +73,12 @@ export function WashCard({
 
       <div
         className="time-equation"
-        style={{gridTemplateColumns: 'repeat(5, minmax(0, 1fr))'}}
-        aria-label={'Drive ' + wash.driveMinutes + ' minutes, queue ' + (queueMinutes === null ? 'unknown' : queueMinutes + ' minutes') + ', wash about ' + wash.estimatedWashMinutes + ' minutes, starts in ' + (startsInMinutes === null ? 'unknown' : startsInMinutes + ' minutes') + ', done in ' + (doneInMinutes === null ? 'unknown' : doneInMinutes + ' minutes')}
+        style={{gridTemplateColumns: 'repeat(3, minmax(0, 1fr))'}}
+        aria-label={'Distance ' + wash.distanceKm.toFixed(1) + ' kilometres, queue ' + (queueMinutes === null ? 'unknown' : queueMinutes + ' minutes') + ', wash about ' + wash.estimatedWashMinutes + ' minutes'}
       >
-        <span><Car size={16} /><b>{wash.driveMinutes}m</b><small>Drive</small></span>
+        <span><MapPin size={16} /><b>{wash.distanceKm.toFixed(1)} km</b><small>Distance</small></span>
         <span><Clock3 size={16} /><b>{queueMinutes === null ? '—' : estimatedPrefix + queueMinutes + 'm'}</b><small>{wash.estimate.estimatedCars !== null ? 'Queue · ~' + wash.estimate.estimatedCars + ' cars' : 'Queue'}</small></span>
         <span><Droplets size={16} /><b>~{wash.estimatedWashMinutes}m</b><small>Wash est.</small></span>
-        <span><Clock3 size={16} /><b>{startsInMinutes === null ? '—' : '~' + startsInMinutes + 'm'}</b><small>Starts in</small></span>
-        <span className="total"><b>{doneInMinutes === null ? '—' : '~' + doneInMinutes + 'm'}</b><small>Done in</small></span>
       </div>
 
       <div className="trust-row">
