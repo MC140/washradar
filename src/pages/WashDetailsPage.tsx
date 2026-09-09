@@ -6,12 +6,13 @@ import {AlertModal} from '../components/AlertModal';
 import {Modal} from '../components/Modal';
 import {NearbyOffer} from '../components/NearbyOffer';
 import {ReportModal} from '../components/ReportModal';
-import {WASH_TYPE_CONFIG} from '../domain/config';
-import {hasQueueEvidence} from '../domain/engine';
-import type {AdCreative, BusinessHours, QueueBucket} from '../domain/models';
+import {QUEUE_CONFIG, WASH_TYPE_CONFIG} from '../domain/config';
+import {distanceKm, hasQueueEvidence} from '../domain/engine';
+import type {AdCreative, BusinessHours, QueueBucket, QueueSignal, RankedWash} from '../domain/models';
 import {analytics} from '../services/analytics';
 import {repository} from '../services';
-import {directionsUrl} from '../services/location';
+import {directionsUrl, requestLocation} from '../services/location';
+import {loadWashDetail} from '../services/washDetail';
 import {useWashRadar} from '../state/WashRadarContext';
 import {minutesAgo, money} from '../utils/format';
 
@@ -29,13 +30,43 @@ const reportLabels: Record<string, string> = {
 
 export function WashDetailsPage() {
   const {id} = useParams();
-  const {washes, signals, favourites, toggleFavourite, startSession, session, loading} = useWashRadar();
-  const wash = washes.find((item) => item.id === id);
+  const {origin, locationReady, washes, signals, favourites, toggleFavourite, startSession, session, loading, refresh} = useWashRadar();
+  const contextWash = washes.find((item) => item.id === id);
+  const [directWash, setDirectWash] = useState<RankedWash | null>(null);
+  const [directSignals, setDirectSignals] = useState<QueueSignal[]>([]);
+  const [directLoading, setDirectLoading] = useState(!contextWash);
+  const [directError, setDirectError] = useState('');
+  const wash = contextWash ?? directWash;
+  const visibleSignals = contextWash ? signals : directSignals;
   const [reportOpen, setReportOpen] = useState(false);
   const [alertOpen, setAlertOpen] = useState(false);
   const [queueOpen, setQueueOpen] = useState(false);
   const [priceOpen, setPriceOpen] = useState(false);
   const [ad, setAd] = useState<AdCreative | null>(null);
+
+  useEffect(() => {
+    if (!id || contextWash) {
+      setDirectLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setDirectLoading(true);
+    setDirectError('');
+    void loadWashDetail(id, locationReady ? origin : undefined)
+      .then((result) => {
+        if (cancelled) return;
+        setDirectWash(result.wash);
+        setDirectSignals(result.signals);
+      })
+      .catch((error) => {
+        if (!cancelled) setDirectError(error instanceof Error ? error.message : 'This wash could not be loaded right now.');
+      })
+      .finally(() => {
+        if (!cancelled) setDirectLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [contextWash, id, locationReady, origin]);
+
   useEffect(() => {
     if (!wash) return;
     analytics.track('wash_viewed', {washId: wash.id});
@@ -44,10 +75,10 @@ export function WashDetailsPage() {
     return () => {cancelled = true;};
   }, [wash]);
 
-  if (loading && !wash) return <div className="detail-loading" />;
-  if (!wash) return <section className="empty-state"><h1>Wash not found</h1><p>This listing may have moved or been removed.</p><Link className="secondary-button" to="/">Back to Explore</Link></section>;
+  if ((loading || directLoading) && !wash) return <div className="detail-loading" />;
+  if (!wash) return <section className="empty-state"><h1>{directError ? 'Wash temporarily unavailable' : 'Wash not found'}</h1><p>{directError || 'This listing may have moved or been removed.'}</p><Link className="secondary-button" to="/">Back to Explore</Link></section>;
 
-  const recent = signals.filter((signal) => signal.washId === wash.id && !signal.disabled).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 8);
+  const recent = visibleSignals.filter((signal) => signal.washId === wash.id && !signal.disabled).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 8);
   const unavailable = wash.estimate.operatingStatus === 'closed' || wash.estimate.operatingStatus === 'unavailable';
   const queueKnown = !unavailable && hasQueueEvidence(wash, wash.estimate);
   const queueMinutes = queueKnown ? wash.estimate.waitMinutes : null;
@@ -56,9 +87,27 @@ export function WashDetailsPage() {
   const priceAge = latestPriceVerification === null ? null : Math.floor((Date.now() - latestPriceVerification) / 86_400_000);
   const status = statusPresentation(wash.estimate.operatingStatus);
   const queueStateLabel = queueKnown ? wash.estimate.dataState : 'LIMITED DATA';
+  const distanceKnown = Boolean(contextWash || locationReady);
+  const distanceLabel = distanceKnown ? `${wash.distanceKm.toFixed(1)} km` : 'Set location';
   const directions = () => {
     analytics.track('directions_clicked', {washId: wash.id, from: 'details'});
     window.open(directionsUrl(wash), '_blank', 'noopener,noreferrer');
+  };
+
+  const startQueue = async (bucket?: QueueBucket) => {
+    if (contextWash) {
+      await startSession(wash.id, bucket);
+      return;
+    }
+    const freshLocation = await requestLocation();
+    if (freshLocation.accuracy > QUEUE_CONFIG.maximumAccurateGpsMetres) {
+      throw new Error('GPS accuracy is too low to verify a queue timer. Try again in a moment or move closer to the wash entrance.');
+    }
+    if (distanceKm(freshLocation.point, wash.position) > QUEUE_CONFIG.nearbyRadiusKm) {
+      throw new Error('You need to be at this car wash to start a verified queue timer. Quick queue reports still work from anywhere.');
+    }
+    await repository.startQueueSession(wash.id, freshLocation.point, bucket);
+    await refresh();
   };
 
   return (
@@ -82,10 +131,11 @@ export function WashDetailsPage() {
               <div><small>CONFIDENCE</small><b><ShieldCheck size={17} /> {queueKnown ? wash.estimate.confidenceLabel : 'Queue unknown'}</b><span>{wash.estimate.recentSignalCount ? wash.estimate.recentSignalCount + ' recent signals' : wash.historicalSampleCount > 0 ? wash.historicalSampleCount + ' historical samples' : 'Waiting for driver or historical data'}</span></div>
             </div>
             <div className="large-equation">
-              <span><MapPin size={20} /><small>DISTANCE</small><b>{wash.distanceKm.toFixed(1)} km</b></span><i>·</i>
+              <span><MapPin size={20} /><small>DISTANCE</small><b>{distanceLabel}</b></span><i>·</i>
               <span><Clock3 size={20} /><small>WAIT</small><b>{queueMinutes === null ? '—' : queueMinutes + ' min'}</b></span><i>·</i>
               <span><Droplets size={20} /><small>WASH EST.</small><b>~{wash.estimatedWashMinutes} min</b></span>
             </div>
+            {!distanceKnown && <p className="disclaimer"><MapPin size={14} /> Set your location on Explore to calculate distance. Directions still opens the wash in your navigation app.</p>}
             <p className="disclaimer"><TriangleAlert size={14} /> Travel time and traffic are intentionally left to your navigation app. WashRadar focuses on distance and queue conditions.</p>
             <div className="detail-actions">
               <button className="queue-update-button" onClick={() => setReportOpen(true)}>Update queue</button>
@@ -110,7 +160,7 @@ export function WashDetailsPage() {
             <dl className="info-list">
               <div><dt>Wash type</dt><dd>{wash.types.length ? wash.types.map((type) => WASH_TYPE_CONFIG[type].label).join(', ') : 'Not yet verified'}</dd></div>
               <div><dt>Hours today</dt><dd>{hoursToday(wash.hours)}</dd></div>
-              <div><dt>Distance</dt><dd>{wash.distanceKm.toFixed(1)} km</dd></div>
+              <div><dt>Distance</dt><dd>{distanceLabel}</dd></div>
               <div><dt>Navigation</dt><dd>Tap Directions for live traffic and ETA in your Maps app</dd></div>
               <div><dt>Amenities</dt><dd>{wash.amenities.join(', ') || 'Not listed'}</dd></div>
               <div><dt>Address</dt><dd>{wash.address}, {wash.city}, {wash.region}</dd></div>
@@ -127,7 +177,7 @@ export function WashDetailsPage() {
       <ReportModal open={reportOpen} initialWash={wash} onClose={() => setReportOpen(false)} />
       <AlertModal open={alertOpen} wash={wash} onClose={() => setAlertOpen(false)} />
       <QueueStartModal open={queueOpen} onClose={() => setQueueOpen(false)} onStart={async (bucket) => {
-        try { await startSession(wash.id, bucket); setQueueOpen(false); toast.success('Verified queue timer started.'); }
+        try { await startQueue(bucket); setQueueOpen(false); toast.success('Verified queue timer started.'); }
         catch (error) { toast.error(error instanceof Error ? error.message : 'The timer could not start.'); }
       }} />
       <PriceCorrectionModal open={priceOpen} washId={wash.id} onClose={() => setPriceOpen(false)} />
