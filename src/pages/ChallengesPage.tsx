@@ -3,20 +3,21 @@ import {Link} from 'react-router-dom';
 import {useEffect, useMemo, useState} from 'react';
 import {contributorLevel} from '../domain/community';
 import {getCommunityDashboard, type CommunityDashboard} from '../services/community';
-import {useWashRadar} from '../state/WashRadarContext';
+import {useCommunityAuth} from '../state/useCommunityAuth';
 import '../community.css';
 
 export function ChallengesPage() {
-  const {auth} = useWashRadar();
+  const auth = useCommunityAuth();
   const [dashboard, setDashboard] = useState<CommunityDashboard | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!auth.ready) return;
     let active = true;
     setLoading(true);
     void getCommunityDashboard().then((value) => { if (active) setDashboard(value); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [auth.signedIn]);
+  }, [auth.ready, auth.signedIn]);
 
   const level = useMemo(() => contributorLevel(dashboard?.points ?? 0), [dashboard?.points]);
   const completed = dashboard?.challenges.filter((item) => Boolean(item.completedAt)).length ?? 0;
@@ -27,13 +28,13 @@ export function ChallengesPage() {
       <div className="points-orb"><Radar size={24} /><strong>{dashboard?.points ?? 0}</strong><span>Radar Points</span></div>
     </div>
 
-    {auth.signedIn && <div className="level-strip panel"><div><Trophy size={20} /><span>Level {level.level}</span><strong>{level.name}</strong></div><div className="level-progress"><i style={{width: `${Math.round(level.progress * 100)}%`}} /></div><small>{level.pointsToNext ? `${level.pointsToNext} points to the next level` : 'Top contributor level reached'}</small></div>}
+    {auth.ready && auth.signedIn && <div className="level-strip panel"><div><Trophy size={20} /><span>Level {level.level}</span><strong>{level.name}</strong></div><div className="level-progress"><i style={{width: `${Math.round(level.progress * 100)}%`}} /></div><small>{level.pointsToNext ? `${level.pointsToNext} points to the next level` : 'Top contributor level reached'}</small></div>}
 
-    {!auth.signedIn && <div className="panel challenge-signin"><LockKeyhole /><div><h2>Keep your progress</h2><p>Sign in to save challenge progress, points and your contributor identity across devices.</p></div><Link className="primary-button" to="/profile">Sign in</Link></div>}
+    {auth.ready && !auth.signedIn && <div className="panel challenge-signin"><LockKeyhole /><div><h2>Keep your progress</h2><p>Sign in once to save challenge progress, points and your contributor identity. This device then stays signed in until you sign out.</p></div><Link className="primary-button" to="/profile">Sign in</Link></div>}
 
     <div className="section-heading"><div><p className="eyebrow">ACTIVE</p><h2>Challenges</h2></div><span>{completed}/{dashboard?.challenges.length ?? 0} complete</span></div>
 
-    {loading ? <div className="panel community-loading">Loading challenges…</div> : <div className="challenge-grid">
+    {!auth.ready || loading ? <div className="panel community-loading">Loading challenges…</div> : <div className="challenge-grid">
       {(dashboard?.challenges ?? []).map((challenge) => {
         const done = Boolean(challenge.completedAt);
         const percent = Math.min(100, Math.round((challenge.progress / Math.max(challenge.goal, 1)) * 100));

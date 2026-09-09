@@ -4,14 +4,14 @@ import type {FormEvent} from 'react';
 import {Link} from 'react-router-dom';
 import {toast} from 'sonner';
 import {addVehicle, getCommunityDashboard, removeVehicle, setPrimaryVehicle, type UserVehicle} from '../services/community';
-import {useWashRadar} from '../state/WashRadarContext';
+import {useCommunityAuth} from '../state/useCommunityAuth';
 import '../community.css';
 
 const currentYear = new Date().getFullYear();
 const years = Array.from({length: currentYear - 1979 + 1}, (_, index) => currentYear + 1 - index);
 
 export function VehiclesPage() {
-  const {auth} = useWashRadar();
+  const auth = useCommunityAuth();
   const [vehicles, setVehicles] = useState<UserVehicle[]>([]);
   const [busy, setBusy] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -27,15 +27,18 @@ export function VehiclesPage() {
   }, []);
 
   useEffect(() => {
+    if (!auth.ready) return;
     void reload();
-  }, [auth.signedIn, reload]);
+  }, [auth.ready, auth.signedIn, reload]);
+
+  if (!auth.ready) return <section className="community-page"><div className="panel community-loading">Restoring your garage…</div></section>;
 
   if (!auth.signedIn) {
     return <section className="community-page">
       <div className="panel sign-in-gate">
         <CarFront size={34} />
         <h1>My Cars</h1>
-        <p>Sign in to save vehicles privately and use them for future wash compatibility and personalized recommendations.</p>
+        <p>Sign in once to save vehicles privately. On this device, your account stays signed in across refreshes until you sign out.</p>
         <Link className="primary-button" to="/profile">Sign in</Link>
       </div>
     </section>;

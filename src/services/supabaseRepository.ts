@@ -1,7 +1,7 @@
-import {createClient, type SupabaseClient} from '@supabase/supabase-js';
-import {appConfig} from '../config/env';
 import type {AdCreative, BusinessHours, CarWash, Point, QueueAlert, QueueReportInput, QueueSession, QueueSignal, WashPackage, WashType} from '../domain/models';
+import {beginCommunitySignIn, getCommunityAuthState, signOutCommunity} from './communityAuth';
 import {clientId, readJson, type AdminSnapshot, type CatalogueImportProgress, type CatalogueImportResult, type ContributionMetrics, type WashRepository} from './repository';
+import {supabaseClient} from './supabaseClient';
 
 type DirectoryRow = {
   id: string;
@@ -118,15 +118,8 @@ function mapWash(row: DirectoryRow): CarWash {
 
 export class SupabaseRepository implements WashRepository {
   readonly mode = 'supabase' as const;
-  private client: SupabaseClient;
+  private client = supabaseClient;
   private activeSession: QueueSession | null = null;
-
-  constructor() {
-    this.client = createClient(appConfig.supabaseUrl, appConfig.supabasePublishableKey, {
-      auth: {persistSession: true, autoRefreshToken: true, detectSessionInUrl: true},
-      realtime: {params: {eventsPerSecond: 2}},
-    });
-  }
 
   private async ensureContributor() {
     const {data: {session}} = await this.client.auth.getSession();
@@ -223,7 +216,8 @@ export class SupabaseRepository implements WashRepository {
   }
 
   private async userId() {
-    const {data: {user}} = await this.client.auth.getUser();
+    const {data: {session}} = await this.client.auth.getSession();
+    const user = session?.user;
     return user?.is_anonymous ? null : user?.id ?? null;
   }
 
@@ -325,15 +319,10 @@ export class SupabaseRepository implements WashRepository {
   }
 
   async signInWithEmail(email: string) {
-    const redirectTo = new URL('auth/confirm', window.location.href).toString();
-    const {error} = await this.client.auth.signInWithOtp({email, options: {emailRedirectTo: redirectTo}});
-    if (error) throw new Error(error.message);
+    await beginCommunitySignIn(email);
   }
-  async signOut() { await this.client.auth.signOut(); }
-  async authState() {
-    const {data: {user}} = await this.client.auth.getUser();
-    return {signedIn: Boolean(user && !user.is_anonymous), email: user?.email ?? null};
-  }
+  async signOut() { await signOutCommunity(); }
+  async authState() { return getCommunityAuthState(); }
   async metrics(): Promise<ContributionMetrics> {
     const {data, error} = await this.client.rpc('my_contribution_metrics');
     if (error || !data?.[0]) return {reportsSubmitted: 0, completedWaits: 0, reputation: 50, streakDays: 0};

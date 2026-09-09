@@ -1,9 +1,4 @@
-import {createClient} from '@supabase/supabase-js';
-import {appConfig} from '../config/env';
-
-const client = createClient(appConfig.supabaseUrl, appConfig.supabasePublishableKey, {
-  auth: {persistSession: true, autoRefreshToken: true, detectSessionInUrl: true},
-});
+import {supabaseClient as client} from './supabaseClient';
 
 export type CommunityProfile = {
   displayName: string | null;
@@ -57,7 +52,8 @@ export type CommunityDashboard = {
 const emptyProfile: CommunityProfile = {displayName: null, handle: null, avatarUrl: null, bio: null, email: null};
 
 async function permanentUser() {
-  const {data: {user}} = await client.auth.getUser();
+  const {data: {session}} = await client.auth.getSession();
+  const user = session?.user ?? null;
   return user && !user.is_anonymous ? user : null;
 }
 

@@ -5,12 +5,14 @@ import {Link} from 'react-router-dom';
 import {toast} from 'sonner';
 import {contributorLevel, initials} from '../domain/community';
 import {getCommunityDashboard, saveCommunityProfile, type CommunityDashboard} from '../services/community';
-import {beginCommunitySignIn} from '../services/communityAuth';
+import {beginCommunitySignIn, signOutCommunity} from '../services/communityAuth';
+import {useCommunityAuth} from '../state/useCommunityAuth';
 import {useWashRadar} from '../state/WashRadarContext';
 import '../community.css';
 
 export function ProfilePage() {
-  const {auth, metrics, signOut, mode} = useWashRadar();
+  const {metrics, mode, refresh} = useWashRadar();
+  const auth = useCommunityAuth();
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
   const [dashboard, setDashboard] = useState<CommunityDashboard | null>(null);
@@ -27,7 +29,10 @@ export function ProfilePage() {
     setBio(value.profile.bio ?? '');
   };
 
-  useEffect(() => { void loadCommunity(); }, [auth.signedIn]);
+  useEffect(() => {
+    if (!auth.ready) return;
+    void loadCommunity();
+  }, [auth.ready, auth.signedIn]);
   const level = useMemo(() => contributorLevel(dashboard?.points ?? 0), [dashboard?.points]);
 
   const saveProfile = async (event: FormEvent) => {
@@ -42,9 +47,12 @@ export function ProfilePage() {
     } finally { setBusy(false); }
   };
 
+  if (!auth.ready) return <section className="community-page"><div className="panel community-loading">Restoring your WashRadar profile…</div></section>;
+
   if (!auth.signedIn) return <section className="profile-layout"><div className="panel profile-main"><span className="profile-icon"><User size={25} /></span><p className="eyebrow">YOUR WASHRADAR</p><h1>Build a contributor identity.</h1><p>Explore without an account. Sign in when you want a profile, Radar Points, challenge progress, vehicles, saved washes and contribution history across devices.</p>
-    <form className="magic-link-form" onSubmit={async (event) => {event.preventDefault(); setBusy(true); try {const result = await beginCommunitySignIn(email); toast.success(result.preservesContributorId ? 'Check your email to keep this contributor history with your account.' : 'Check your email for a secure sign-in link.');} catch (error) {toast.error(error instanceof Error ? error.message : 'Sign-in is unavailable.');} finally {setBusy(false);}}}><label>Email address<input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></label><button className="primary-button" disabled={busy}>Email me a sign-in link</button></form>
-    {mode === 'demo' && <p className="demo-auth-note">Email is intentionally disabled in demo mode. Connect the production Supabase project to enable magic links.</p>}
+    <form className="magic-link-form" onSubmit={async (event) => {event.preventDefault(); setBusy(true); try {const result = await beginCommunitySignIn(email); if (result.alreadySignedIn) toast.success('You are already signed in on this device.'); else toast.success(result.preservesContributorId ? 'Check your email once to attach this contributor history to your account.' : 'Check your email for your secure first sign-in link.');} catch (error) {toast.error(error instanceof Error ? error.message : 'Sign-in is unavailable.');} finally {setBusy(false);}}}><label>Email address<input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></label><button className="primary-button" disabled={busy}>{busy ? 'Sending…' : 'Continue with email'}</button></form>
+    <p className="signin-persistence-note"><ShieldCheck size={16} /> First sign-in verifies your email. After that, this device stays signed in across refreshes and pages until you choose Sign out.</p>
+    {mode === 'demo' && <p className="demo-auth-note">Email is intentionally disabled in demo mode. Connect the production Supabase project to enable email sign-in.</p>}
     <div className="profile-signin-benefits"><span><Trophy /> Challenges & Radar Points</span><span><CarFront /> Private My Cars garage</span><span><BarChart3 /> Contribution history</span></div>
   </div><aside><div className="panel privacy-panel"><ShieldCheck /><h2>Low friction, private by design.</h2><p>WashRadar stores proximity verification for trust, not a public location trail. Your saved vehicles and profile account data stay private to your account.</p></div></aside></section>;
 
@@ -57,7 +65,7 @@ export function ProfilePage() {
     <div className="profile-identity panel">
       <div className="avatar-circle">{profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" /> : profileInitials}</div>
       <div className="profile-identity-copy"><p className="eyebrow">YOUR WASHRADAR</p><h1>{name}</h1><p>{profile?.handle ? `@${profile.handle}` : profile?.email ?? auth.email}</p>{profile?.bio && <span>{profile.bio}</span>}</div>
-      <div className="profile-actions"><button className="secondary-button" onClick={() => setEditing((value) => !value)}><Edit3 size={15} /> Edit profile</button><button className="text-button" onClick={() => void signOut()}>Sign out</button></div>
+      <div className="profile-actions"><button className="secondary-button" onClick={() => setEditing((value) => !value)}><Edit3 size={15} /> Edit profile</button><button className="text-button" onClick={async () => {try {await signOutCommunity(); setDashboard(null); await refresh(); toast.success('Signed out.');} catch (error) {toast.error(error instanceof Error ? error.message : 'Could not sign out.');}}}>Sign out</button></div>
     </div>
 
     {editing && <form className="panel profile-editor" onSubmit={saveProfile}><div className="section-heading"><div><p className="eyebrow">PROFILE</p><h2>How drivers know you</h2></div><User /></div><div className="profile-fields"><label>Display name<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} maxLength={50} required placeholder="Your name" /></label><label>Handle<input value={handle} onChange={(event) => setHandle(event.target.value.replace(/^@/, ''))} maxLength={24} required placeholder="washscout" /></label></div><label>Short bio <small>optional</small><input value={bio} onChange={(event) => setBio(event.target.value)} maxLength={120} placeholder="GTA wash scout" /></label><p className="privacy-hint">Your display name and handle identify your contributor profile. Your email is never shown publicly by this screen.</p><div className="form-actions"><button type="button" className="secondary-button" onClick={() => setEditing(false)}>Cancel</button><button className="primary-button" disabled={busy}>{busy ? 'Saving…' : 'Save profile'}</button></div></form>}
