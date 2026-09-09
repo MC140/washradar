@@ -1,14 +1,14 @@
-import {Bell, Compass, Heart, MapPin, Plus, Radar, User} from 'lucide-react';
+import {Bell, Compass, Heart, MapPin, Plus, Radar, Trophy, User} from 'lucide-react';
 import {useEffect, useState} from 'react';
 import {Link, NavLink, Outlet} from 'react-router-dom';
 import {useWashRadar} from '../state/WashRadarContext';
 import {QueueSessionBanner} from './QueueSessionBanner';
 import {ReportModal} from './ReportModal';
 
-const navigation = [
+const mobileNavigation = [
   {to: '/', label: 'Explore', icon: Compass},
   {to: '/saved', label: 'Saved', icon: Heart},
-  {to: '/alerts', label: 'Alerts', icon: Bell},
+  {to: '/challenges', label: 'Challenges', icon: Trophy},
   {to: '/profile', label: 'Profile', icon: User},
 ];
 
@@ -16,6 +16,7 @@ export function AppShell() {
   const {locationLabel, locationReady, locate, alerts} = useWashRadar();
   const [reportOpen, setReportOpen] = useState(false);
   const [updateReady, setUpdateReady] = useState(false);
+  const hasTriggeredAlert = alerts.some((entry) => Boolean(entry.triggeredAt));
   useEffect(() => {
     const ready = () => setUpdateReady(true);
     window.addEventListener('washradar:update-ready', ready);
@@ -27,10 +28,14 @@ export function AppShell() {
       <header className="site-header">
         <Link className="brand" to="/" aria-label="WashRadar home"><span><Radar size={24} /></span>Wash<b>Radar</b></Link>
         <nav className="desktop-nav" aria-label="Primary navigation">
-          {navigation.slice(0, 3).map((item) => <NavLink key={item.to} to={item.to}>{item.label}</NavLink>)}
+          <NavLink to="/">Explore</NavLink>
+          <NavLink to="/saved">Saved</NavLink>
+          <NavLink to="/challenges">Challenges</NavLink>
+          <NavLink to="/alerts">Alerts</NavLink>
           <button onClick={() => setReportOpen(true)}>Report</button>
         </nav>
         <button className="location-button" onClick={() => void locate()}><MapPin size={16} /><span>{locationLabel}</span><small>{locationReady ? 'Change' : 'Set'}</small></button>
+        <NavLink className="profile-link header-alert-link" to="/alerts" aria-label="Alerts"><Bell size={19} />{hasTriggeredAlert && <i />}</NavLink>
         <NavLink className="profile-link" to="/profile" aria-label="Profile"><User size={19} /></NavLink>
       </header>
       <QueueSessionBanner />
@@ -47,15 +52,15 @@ export function AppShell() {
         <small>Queue, price and availability information may change. Verify before travelling.</small>
       </footer>
       <nav className="bottom-nav" aria-label="Mobile navigation">
-        {navigation.slice(0, 2).map((item) => <NavItem key={item.to} {...item} />)}
+        {mobileNavigation.slice(0, 2).map((item) => <NavItem key={item.to} {...item} />)}
         <button className="report-nav" onClick={() => setReportOpen(true)}><span><Plus size={22} /></span><small>Report</small></button>
-        {navigation.slice(2).map((item) => <NavItem key={item.to} {...item} alert={item.label === 'Alerts' && alerts.some((entry) => Boolean(entry.triggeredAt))} />)}
+        {mobileNavigation.slice(2).map((item) => <NavItem key={item.to} {...item} />)}
       </nav>
       <ReportModal open={reportOpen} onClose={() => setReportOpen(false)} />
     </>
   );
 }
 
-function NavItem({to, label, icon: Icon, alert}: {to: string; label: string; icon: typeof Compass; alert?: boolean}) {
-  return <NavLink to={to} end={to === '/'}><span><Icon size={21} />{alert && <i />}</span><small>{label}</small></NavLink>;
+function NavItem({to, label, icon: Icon}: {to: string; label: string; icon: typeof Compass}) {
+  return <NavLink to={to} end={to === '/'}><span><Icon size={21} /></span><small>{label}</small></NavLink>;
 }
