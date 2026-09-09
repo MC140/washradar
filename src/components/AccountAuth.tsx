@@ -2,7 +2,6 @@ import {KeyRound, Mail, ShieldCheck} from 'lucide-react';
 import {useState, type FormEvent} from 'react';
 import {toast} from 'sonner';
 import {
-  requestPasswordReset,
   signInWithPassword,
   signUpWithPassword,
 } from '../services/communityAuth';
@@ -15,16 +14,10 @@ export function AccountAuth({compact = false}: Props) {
   const [mode, setMode] = useState<Mode>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [busy, setBusy] = useState(false);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (mode === 'signup' && password !== confirmPassword) {
-      toast.error('Passwords do not match.');
-      return;
-    }
-
     setBusy(true);
     try {
       if (mode === 'signin') {
@@ -33,25 +26,13 @@ export function AccountAuth({compact = false}: Props) {
       } else {
         const result = await signUpWithPassword(email, password);
         if (result.confirmationRequired) {
-          toast.success('Check your email once to verify your WashRadar account. Your password is already set.');
+          toast.error('Email verification is still enabled for this beta, but public email delivery is not configured yet. Please try again after the beta auth setting is updated.');
         } else {
-          toast.success('WashRadar account created.');
+          toast.success('WashRadar account created. You’re signed in.');
         }
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Account action is unavailable.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const recover = async () => {
-    setBusy(true);
-    try {
-      await requestPasswordReset(email);
-      toast.success('If that email can receive WashRadar account mail, a password setup/reset message is on the way.');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Password recovery is unavailable.');
     } finally {
       setBusy(false);
     }
@@ -64,14 +45,14 @@ export function AccountAuth({compact = false}: Props) {
     </div>
 
     <form className="account-auth-form" onSubmit={submit}>
-      <label>Email address<div className="auth-input-wrap"><Mail size={17} /><input type="email" required autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></div></label>
-      <label>Password<div className="auth-input-wrap"><KeyRound size={17} /><input type="password" required minLength={mode === 'signup' ? 12 : undefined} autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} value={password} onChange={(event) => setPassword(event.target.value)} placeholder={mode === 'signup' ? '12+ chars, upper/lower, number & symbol' : 'Your password'} /></div></label>
-      {mode === 'signup' && <label>Confirm password<div className="auth-input-wrap"><KeyRound size={17} /><input type="password" required minLength={12} autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Repeat password" /></div></label>}
+      <label>Email address<div className="auth-input-wrap"><Mail size={17} /><input name="email" type="email" required autoComplete="email" autoCapitalize="none" spellCheck={false} value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></div></label>
+      <label>Password<div className="auth-input-wrap"><KeyRound size={17} /><input name="password" type="password" required minLength={mode === 'signup' ? 8 : undefined} maxLength={128} autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} value={password} onChange={(event) => setPassword(event.target.value)} placeholder={mode === 'signup' ? '8 or more characters' : 'Your password'} /></div></label>
       <button className="primary-button auth-primary" disabled={busy}>{busy ? 'Please wait…' : mode === 'signin' ? 'Sign in' : 'Create account'}</button>
     </form>
 
-    {mode === 'signin' && <button type="button" className="auth-recovery-link" disabled={busy || !email.trim()} onClick={() => void recover()}>Forgot password or used email links before? <strong>Create / reset password</strong></button>}
-
-    <p className="auth-email-note"><ShieldCheck size={16} /> {mode === 'signin' ? 'Normal sign-ins do not send email. Your session stays on this device until you sign out.' : 'For the friends beta, use a unique 12+ character password with upper/lowercase letters, a number and a symbol. We send one verification email for a new account.'}</p>
+    <p className="auth-email-note"><ShieldCheck size={16} /> {mode === 'signin'
+      ? 'Normal sign-ins use your email and password. Your session stays on this device until you sign out.'
+      : 'Use 8 or more characters. Suggested strong passwords from your phone, browser or password manager are supported. No second password entry is required.'}</p>
+    {mode === 'signin' && <p className="auth-email-note"><ShieldCheck size={16} /> Password-reset email is intentionally unavailable during the friends beta until public email delivery is configured.</p>}
   </div>;
 }
