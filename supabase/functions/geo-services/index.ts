@@ -52,7 +52,9 @@ Deno.serve(async (request) => {
     if (!location) return json(request, {point: null});
     await db.from('geocode_cache').upsert({
       query_hash: queryHash,
-      query_normalized: normalized,
+      // Store only the salted hash, coordinates and expiry. A user's literal house
+      // address is not needed after lookup and should not be retained in our database.
+      query_normalized: null,
       latitude: location.lat,
       longitude: location.lng,
       provider: 'google',
