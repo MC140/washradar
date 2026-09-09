@@ -101,8 +101,8 @@ test('friends beta exposes email/password only and strong signup fields', async 
   await expect(page.getByRole('button', {name: 'Continue with Apple'})).toHaveCount(0);
   await expect(page.getByRole('tab', {name: 'Sign in'})).toBeVisible();
   await page.getByRole('tab', {name: 'Create account'}).click();
-  await expect(page.getByLabel('Password').locator('input')).toHaveAttribute('minlength', '12');
-  await expect(page.getByLabel('Confirm password').locator('input')).toHaveAttribute('minlength', '12');
+  await expect(page.getByLabel('Password')).toHaveAttribute('minlength', '12');
+  await expect(page.getByLabel('Confirm password')).toHaveAttribute('minlength', '12');
 });
 
 test('queue target UX does not promise background push delivery', async ({page}) => {
