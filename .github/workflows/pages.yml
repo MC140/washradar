@@ -21,37 +21,45 @@ jobs:
           cache: npm
       - run: npm ci
 
+      # The full civic-address index is static public data. Keep it out of Supabase so
+      # normal address suggestions consume neither database capacity nor paid API calls.
       - name: Restore generated GTA address index
         id: address-index-cache
         uses: actions/cache@v4
         with:
           path: public/address-index
-          key: gta-address-index-202606-${{ hashFiles('scripts/build_gta_address_index.py') }}
+          key: gta-address-index-oda-on-v1-${{ hashFiles('scripts/build_gta_address_index.py') }}
 
-      - name: Restore Statistics Canada NAR source archive
+      - name: Restore Statistics Canada Ontario ODA archive
         if: steps.address-index-cache.outputs.cache-hit != 'true'
-        id: nar-cache
+        id: oda-cache
         uses: actions/cache@v4
         with:
-          path: .cache/nar
-          key: statcan-nar-202606
+          path: .cache/oda
+          key: statcan-oda-on-v1
 
-      - name: Download Statistics Canada NAR June 2026
-        if: steps.address-index-cache.outputs.cache-hit != 'true' && steps.nar-cache.outputs.cache-hit != 'true'
+      - name: Download Statistics Canada Ontario ODA
+        if: steps.address-index-cache.outputs.cache-hit != 'true' && steps.oda-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
         run: |
-          mkdir -p .cache/nar
-          curl --fail --location --retry 5 --retry-delay 5 --connect-timeout 30 \
-            --output .cache/nar/202606.zip \
-            https://www150.statcan.gc.ca/n1/pub/46-26-0002/2022001/202606.zip
+          mkdir -p .cache/oda
+          curl --fail --location --retry 4 --retry-delay 4 --connect-timeout 30 \
+            --output .cache/oda/ODA_ON_v1.zip \
+            https://www150.statcan.gc.ca/n1/en/pub/46-26-0001/2021001/ODA_ON_v1.zip
 
       - name: Build zero-cost GTA address autocomplete index
         if: steps.address-index-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
         run: |
-          python3 scripts/build_gta_address_index.py \
-            --zip .cache/nar/202606.zip \
-            --output public/address-index \
-            --release 202606
-          cat public/address-index/manifest.json
+          if [ -s .cache/oda/ODA_ON_v1.zip ]; then
+            python3 scripts/build_gta_address_index.py \
+              --zip .cache/oda/ODA_ON_v1.zip \
+              --output public/address-index \
+              --release ODA-ON-v1
+          else
+            echo "Ontario ODA unavailable; deploying the built-in GTA city index and retaining provider fallback."
+          fi
+          if [ -f public/address-index/manifest.json ]; then cat public/address-index/manifest.json; fi
 
       - name: Build static PWA
         run: npm run build
