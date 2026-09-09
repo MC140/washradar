@@ -31,8 +31,11 @@ export function normalizeAuthEmail(email: string) {
 }
 
 function assertPassword(password: string) {
-  if (password.length < 8) throw new Error('Use at least 8 characters for your password.');
+  if (password.length < 12) throw new Error('Use at least 12 characters for your password.');
   if (password.length > 128) throw new Error('Password is too long.');
+  if (!/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/\d/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
+    throw new Error('Use uppercase and lowercase letters, a number, and a symbol in your password.');
+  }
 }
 
 function cooldownKey(email: string) {
@@ -161,8 +164,6 @@ export async function getAuthCapabilities(): Promise<AuthCapabilities> {
         apple: settings.external?.apple === true,
       };
     } catch {
-      // Email/password is enabled by default in hosted Supabase. Keep the core login available if
-      // capability discovery is temporarily blocked; social buttons remain hidden until confirmed.
       return {email: true, google: false, apple: false};
     }
   })();
@@ -189,8 +190,6 @@ export async function signUpWithPassword(email: string, password: string) {
   assertCanSend(normalized);
   await prepareAnonymousMerge();
 
-  // Use a non-persistent auth client so a pending/failed signup never destroys the current guest
-  // contributor session. If confirmation is required, the guest remains intact until the link returns.
   const auth = probeClient();
   const {data, error} = await auth.auth.signUp({
     email: normalized,
@@ -237,11 +236,9 @@ export async function signInWithSocial(provider: SocialProvider) {
   if (error) throw socialAuthError(error, provider);
 }
 
-// Kept only for the legacy repository interface. Magic-link login is intentionally no longer part
-// of the WashRadar account model; normal login uses password/social, with email only for verification/recovery.
 export async function beginCommunitySignIn(email: string): Promise<never> {
   if (!normalizeAuthEmail(email)) throw new Error('Enter your email address.');
-  throw new Error('Use email + password, Google, or Apple to sign in.');
+  throw new Error('Use email + password to sign in.');
 }
 
 export async function signOutCommunity() {
