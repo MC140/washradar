@@ -2,9 +2,11 @@ import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App';
 import {installAddressAutocomplete} from './services/addressAutocomplete';
+import {installCostOptimizations} from './services/costOptimizations';
 import './styles.css';
 import './ui-polish.css';
 
+installCostOptimizations();
 installAddressAutocomplete();
 createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>);
 
