@@ -239,7 +239,8 @@ export async function signInWithSocial(provider: SocialProvider) {
 
 // Kept only for the legacy repository interface. Magic-link login is intentionally no longer part
 // of the WashRadar account model; normal login uses password/social, with email only for verification/recovery.
-export async function beginCommunitySignIn(_email: string): Promise<never> {
+export async function beginCommunitySignIn(email: string): Promise<never> {
+  if (!normalizeAuthEmail(email)) throw new Error('Enter your email address.');
   throw new Error('Use email + password, Google, or Apple to sign in.');
 }
 
