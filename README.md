@@ -1,208 +1,614 @@
 # WashRadar
 
-WashRadar answers one question: **Where should I wash my car right now?**
+WashRadar answers one question:
 
-It compares drive time, queue time, expected wash duration, total time, price, wash type, rating, hours, status and data confidence. The organic **Best Right Now** recommendation is calculated independently of clearly labelled sponsored placements.
+> **Where should I wash my car right now?**
 
-The public application is a mobile-first React PWA hosted as static files on GitHub Pages. Supabase provides PostgreSQL, authentication, Realtime and protected Edge Functions. A clearly marked local demo works without paid API credentials.
+The product is a mobile-first car-wash discovery and live queue PWA for Canada, starting with the GTA. Its differentiated value is **queue intelligence and trustworthy wash information**, not navigation. Google Maps and Apple Maps already solve live traffic and turn-by-turn routing well, so WashRadar should avoid paying to recreate that functionality.
 
-## Architecture
+**Production:** https://washradar.ca  
+**Repository:** `MC140/washradar`  
+**Supabase project:** `mwyomijlvjfllgeniqcz` (Canada Central)
 
-    GitHub Pages (React + Vite PWA)
-            |
-            +-- Supabase Data API (public reads and user-owned RLS data)
-            +-- Supabase Realtime (queue_estimates)
-            +-- Supabase Edge Functions
-                  +-- queue reports and sessions
-                  +-- cached geocoding and controlled Places ingestion
-                  +-- ad and analytics validation
-                  +-- protected moderation
+---
 
-The browser contains only public configuration. The Supabase service-role key, Google server key, device-hash salt and admin allowlist remain Supabase Edge Function secrets.
+# Start here in a future chat
 
-- **src/domain:** queue estimation, confidence, total-time and ranking logic.
-- **src/services:** provider-neutral repository, Supabase adapter, demo persistence, location and analytics.
-- **src/components and src/pages:** responsive consumer, reporting, map, profile and admin UI.
-- **supabase/migrations:** normalized PostgreSQL schema, indexes, RLS and safe public RPCs.
-- **supabase/functions:** privileged validation, ingestion, moderation and cost-controlled external calls.
-- **.github/workflows:** quality checks and GitHub Pages deployment.
-- **tests and e2e:** domain/service and Playwright user-flow coverage.
+This README is intentionally also the project handoff/context file. Before changing architecture, read this section and the current blocker/roadmap sections below.
 
-## Local development
+## Product intent
 
-Requirements: Node.js 22.13 or newer and npm.
+WashRadar should help a driver answer, with as little friction as possible:
 
-    git clone YOUR_REPOSITORY_URL
-    cd washradar
-    npm ci
-    cp .env.example .env.local
-    npm run dev
+- Which car washes are near me?
+- Which are open?
+- What wash type do they offer?
+- What is the queue right now?
+- How trustworthy/fresh is that queue information?
+- How long is the wash itself likely to take?
+- Is it worth driving slightly farther for a much shorter queue?
+- How do I navigate there?
 
-Open http://localhost:4173. Set VITE_DEMO_MODE=true for 20 fictional GTA washes. Reports, favourites, alerts and queue sessions persist locally. Demo content always displays a prominent disclosure; the Pages production workflow forces demo mode off.
+The guiding product rule is:
+
+> **Low friction for users. High scrutiny for data.**
+
+Do not put mandatory accounts, CAPTCHA or invasive device fingerprinting in front of basic browsing or contributions. Instead, allow contributions and control how much influence each contribution receives based on proximity, freshness, reputation, agreement and verified queue sessions.
+
+## Cost philosophy
+
+Normal browsing should generate **$0 of paid Google API traffic whenever possible**.
+
+The intended architecture is:
+
+- **GPS:** browser/phone geolocation — free to WashRadar.
+- **Distance:** calculated locally from coordinates — free.
+- **Catalogue:** canonical wash records stored in Supabase.
+- **Queue:** WashRadar community + historical data in Supabase.
+- **Address autocomplete:** static Statistics Canada National Address Register index hosted with the app — no per-search Google or Supabase database cost.
+- **Traffic/navigation:** user taps **Directions** and their Google Maps/Apple Maps app handles traffic and ETA.
+- **Google Places:** occasional administrative catalogue maintenance/enrichment only.
+- **Google Geocoding:** fallback only when our own address/city/postal search cannot resolve a location.
+
+Do not reintroduce automatic Google Routes calls during normal browsing unless there is a deliberate future product decision to accept that cost.
+
+---
+
+# Current project state — 2026-09-09
+
+## Current production infrastructure
+
+- `washradar.ca` is the primary production domain.
+- `carwashbuddy.ca` is retained as a redirect/backup domain.
+- Frontend: React + Vite + TypeScript PWA on GitHub Pages.
+- Backend: Supabase PostgreSQL, Auth, Realtime and Edge Functions.
+- Map display currently uses the open tile-map path rather than Google map loads.
+- Production Supabase project ref: `mwyomijlvjfllgeniqcz`.
+- Supabase database is still small relative to the Free-plan 500 MB database allowance; the last measured size was about 24 MB before any full GTA address dataset was loaded.
+
+### Namecheap DNS for `washradar.ca`
+
+- A `@` → `185.199.108.153`
+- A `@` → `185.199.109.153`
+- A `@` → `185.199.110.153`
+- A `@` → `185.199.111.153`
+- CNAME `www` → `mc140.github.io`
+
+GitHub Pages custom-domain HTTPS has been configured.
+
+## Supabase Edge Functions currently used
+
+- `ad-events`
+- `admin`
+- `analytics-events`
+- `geo-services`
+- `queue-actions`
+- `wash-ingest`
+- `wash-type-actions`
+
+Temporary bootstrap/diagnostic functions should remain disabled rather than becoming part of normal production traffic.
+
+## Authentication
+
+Supabase Auth is configured for the production domain. Anonymous users can contribute queue information; email auth exists for users who want an account. User-owned favourites can remain local for anonymous users and sync when appropriate.
+
+The product must not require sign-in simply to find a wash or submit a basic queue observation.
+
+---
+
+# Completed work
+
+## 1. GTA wash catalogue
+
+A broad GTA catalogue has already been imported and normalized in Supabase.
+
+Approximate last known state:
+
+- ~889 total saved wash locations.
+- ~800 with real weekly opening hours.
+- ~859 within true GTA municipalities.
+- Some useful spillover locations outside the strict GTA boundary are intentionally tolerated rather than automatically deleted.
+- ~188 distinct FSA prefixes across the whole catalogue.
+
+Normal nearby browsing reads this saved catalogue. It should **not** call Google Places discovery for every user session.
+
+### Catalogue refresh policy
+
+Do not run another full expensive Google enrichment sweep casually.
+
+Prefer selective refreshes:
+
+- address/business status: infrequent/monthly or when stale/problematic;
+- opening hours: roughly monthly;
+- ratings: monthly or less frequently;
+- wash type: only unresolved/stale locations;
+- reviews/editorial fields: only unresolved locations where cheaper sources did not classify the wash.
+
+The C$20 Google Cloud budget alert seen during development was driven primarily by one-time catalogue/detail enrichment, not by ordinary Supabase browsing.
+
+## 2. Zero-cost normal routing
+
+Automatic Google traffic-route calls have been removed from the normal browsing experience.
+
+The production `geo-services` Edge Function also contains a backend guard: a `routes` request returns an empty `disabled-zero-cost` result rather than contacting Google Routes.
+
+The UI direction is now:
+
+- show **distance**;
+- show **queue time**;
+- show **wash-time estimate**;
+- keep a prominent but compact **Directions** action;
+- let the user's navigation app provide live traffic/ETA.
+
+Do not present a locally derived driving estimate as if it were live traffic.
+
+PR #12 implemented the zero-cost routing/address-search foundation.
+
+## 3. Queue trust engine
+
+Queue reporting is designed to accept contributions with low friction while weighting evidence carefully.
+
+Current principles:
+
+- fresh nearby GPS report = strong influence;
+- remote report = accepted but weak influence;
+- verified queue session = strongest evidence;
+- evidence decays with time;
+- weighted consensus/median is used;
+- only the latest signal per actor/wash should materially influence the current estimate;
+- remote-only reports cannot easily create a LIVE state;
+- closure/unavailable status requires stronger nearby evidence.
+
+Freshness approximately follows:
+
+- ≤5 min: strongest;
+- ≤15 min: strong;
+- ≤30 min: moderate;
+- ≤60 min: weak;
+- older than 60 min: no live influence.
+
+The UI must distinguish LIVE / recent / estimated / limited-data states and never convert unknown queue into zero.
+
+Queue reports request a fresh GPS sample at submission time when possible. A blocked/coarse position does not prevent contribution; it simply reduces trust. Verified queue timers require stronger proximity/accuracy.
+
+## 4. Wash-type trust system
+
+Google Places structured `types` does not reliably tell us whether a wash is touchless, soft-cloth, tunnel, self-serve, hand wash, etc. WashRadar therefore has a multi-source evidence model.
+
+Sources include:
+
+- explicit business-name wording;
+- official website;
+- Google editorial summary;
+- Google reviews when needed;
+- nearby contributor reports;
+- contributor reputation and independence.
+
+Relevant production structures include `wash_type_evidence`, `wash_type_reports`, `car_wash_types` confidence metadata and `wash-type-actions`.
+
+A type should be published only when confidence crosses the configured threshold. One weak/remote report should not be able to label a business definitively.
+
+A previous enrichment run processed 250 places but initially classified none because the service role lacked SELECT on `wash_types`; that grant was repaired. The enrichment quota was then exhausted for that day. Avoid raising safety caps automatically just to finish a batch.
+
+## 5. Real hours and safer unknown handling
+
+Completed UI/data fixes include:
+
+- fake/default opening-hours text removed;
+- real weekly hours shown when available;
+- unknown hours stay unknown;
+- unknown queue stays `—` rather than `0`;
+- unknown operating status is not described as a failure/outage;
+- filters depending on unavailable data are disabled rather than guessed;
+- stale queue signals are re-ranked locally as they age.
+
+## 6. UI polish
+
+Completed changes include:
+
+- small blue **Directions** pill near queue information;
+- compact Directions action on detail pages;
+- contribution CTA renamed **Update queue**;
+- Update queue styled for visibility;
+- type-filter chips show nearby verified counts and disable zero-result categories;
+- recommendation wording softens appropriately when data is incomplete.
+
+## 7. Ads foundation
+
+The database already supports:
+
+- advertiser businesses;
+- campaigns;
+- creatives;
+- placements;
+- radius/city/neighbourhood/region targeting;
+- dates, priority, caps and budget/pricing metadata;
+- impression/click tracking.
+
+Seeded placement concepts include:
+
+- `explore_nearby_offer`
+- `wash_detail_nearby_offer`
+- `queue_wait_offer`
+- `post_wash_offer`
+- `sponsored_wash`
+
+The consumer UI currently uses Explore/detail nearby-offer placements. There are no production advertisers/campaigns yet.
+
+An `/ad-preview` page was added in PR #10 to preview fictional placements and viewability without producing real ad analytics.
+
+Organic recommendation scoring must remain separate from paid placement eligibility.
+
+## 8. Custom domain
+
+PR #4 configured the custom-domain production build and CORS support for:
+
+- `https://washradar.ca`
+- `https://www.washradar.ca`
+- legacy GitHub Pages origin where needed.
+
+---
+
+# Address autocomplete strategy
+
+## Goal
+
+A GTA user should be able to type a home/street address and see a Google-like dropdown **without a paid autocomplete API**.
+
+## Chosen source
+
+Use Statistics Canada's **National Address Register (NAR)** as the canonical free/open address source for GTA civic addresses and coordinates.
+
+## Preferred architecture
+
+Do **not** put millions of household/building address rows into the main Supabase database unless there is a compelling reason.
+
+Preferred architecture:
+
+1. Download the NAR release during a controlled build/update workflow.
+2. Filter to GTA municipalities.
+3. Keep one useful record per physical building rather than duplicating apartment units that share the same routing origin.
+4. Normalize addresses and coordinates.
+5. Partition the resulting autocomplete index into small static chunks.
+6. Publish those chunks through GitHub Pages with the PWA.
+7. Load only the relevant chunk(s) in the browser as the user types.
+8. Resolve city/postal area locally first.
+9. Use Google Geocoding only as a rare fallback.
+
+Advantages:
+
+- $0 per address-autocomplete search;
+- almost no Supabase quota consumed by autocomplete;
+- no Google Places Autocomplete dependency;
+- coordinates are already present in NAR;
+- easy to cache in browser/CDN;
+- address source can be refreshed periodically without affecting queue data.
+
+## Supabase address foundation
+
+`address_points`, `address_import_state` and an `address_suggestions(...)` RPC were prepared earlier as a fallback/server-side option, but the preferred production direction is now static partitioned files. Do not bulk-load all GTA civic addresses into Supabase unless the static architecture proves inadequate.
+
+Google geocode cache no longer needs to retain the raw normalized address string. Hash + coordinates are sufficient for fallback caching; raw-query retention was removed to reduce unnecessary address data storage.
+
+---
+
+# CURRENT BLOCKER — address autocomplete deployment
+
+PR #13 **was merged** and contains the zero-cost GTA address autocomplete implementation.
+
+The GitHub Pages deployment then failed specifically at:
+
+> **Build zero-cost GTA address autocomplete index**
+
+Important details for the next session:
+
+- The Statistics Canada NAR download step **succeeded**.
+- The failure occurred in the **index-generation Python step**.
+- Because that build step failed, the normal static PWA build/deployment was skipped for that workflow run.
+- Quality checks for PR #13 passed before merge.
+- The workflow run to inspect is `34313873634` and the failed build job was `102345897680`.
+- The relevant builder is `scripts/build_gta_address_index.py`.
+- The relevant workflow is `.github/workflows/pages.yml`.
+- Fix this build/index-generation failure before considering the address autocomplete feature complete in production.
+
+Do not restart the address-autocomplete design from scratch. The architecture and frontend foundation already exist; debug the current generator/workflow.
+
+---
+
+# Near-term implementation roadmap
+
+Priority order:
+
+1. **Fix the PR #13 Pages failure** in `scripts/build_gta_address_index.py` / the NAR archive parsing path.
+2. Confirm generated GTA address index size, address count and partition count.
+3. Confirm `washradar.ca` serves the generated address chunks and autocomplete dropdown on mobile.
+4. Test real GTA household addresses across Toronto, Peel, Halton, York and Durham.
+5. Confirm selecting an autocomplete result updates the origin without calling Google Geocoding.
+6. Keep Google Geocoding only as fallback and add usage telemetry that distinguishes `local-address`, `local-area`, `cache` and `google-fallback` without storing raw house searches.
+7. Continue freezing expensive full-catalogue Google enrichment; refresh only stale/unresolved records.
+8. Re-run wash-type enrichment only after daily quota resets and validate that classifications are now being stored.
+9. Conduct physical iPhone Safari/Chrome and Android testing for GPS, autocomplete, queue reports, PWA install and deep links.
+
+---
+
+# Future roadmap
+
+## Consumer experience
+
+- Better queue density and coverage as more users contribute.
+- More useful historical queue expectations by hour/day only after enough samples exist.
+- Better recommendation explanation: e.g. "3 km farther, but ~15 min less queue" without pretending to know live traffic.
+- Optional alerts when a favourite wash queue drops below a threshold.
+- Stronger PWA install/onboarding polish.
+- Accessibility and mobile performance hardening.
+
+## Data quality
+
+- Periodic selective business-hours/status refresh.
+- Owner/business verification for corrections.
+- Contributor reputation maturation.
+- Better conflict handling for wash-type and price reports.
+- Automatic retirement/review of stale wash listings.
+
+## Address/search
+
+- Periodic NAR release refresh workflow.
+- Static index versioning and cache invalidation.
+- Efficient fuzzy/prefix matching without loading large datasets into memory.
+- Canada-wide expansion by province/metro only after GTA proves the model.
+
+## Advertising/business model
+
+Future advertiser work can include:
+
+- self-service advertiser onboarding;
+- address geocoding for campaign centre;
+- map/radius selector;
+- radius-based pricing calculator;
+- payments/invoices;
+- campaign approval workflow;
+- queue-wait and post-wash placements where tasteful.
+
+Radius pricing should increase more than linearly as reach expands because geographic area grows roughly with radius squared.
+
+## Expansion
+
+After GTA product/queue density is validated, expand incrementally to other Canadian metros rather than importing all of Canada at once.
+
+---
+
+# Architecture
+
+```text
+GitHub Pages (React + Vite PWA)
+        |
+        +-- static app shell / service worker
+        +-- static GTA address autocomplete chunks (NAR)
+        |
+        +-- Supabase Data API
+        |     +-- canonical washes
+        |     +-- hours / types / queue state
+        |     +-- user-owned data under RLS
+        |
+        +-- Supabase Realtime
+        |     +-- queue estimate updates
+        |
+        +-- Supabase Edge Functions
+              +-- queue validation/sessions
+              +-- geocode fallback
+              +-- controlled Places ingestion
+              +-- wash-type evidence
+              +-- ads/analytics
+              +-- protected admin/moderation
+
+Directions button --> user's Google Maps / Apple Maps app
+                    (live traffic/ETA handled outside WashRadar)
+```
+
+The browser contains only public configuration. Service-role credentials, Google server key, device hash salt and admin allowlist remain server-side Supabase secrets.
+
+Main source folders:
+
+- `src/domain` — ranking, queue estimation, confidence and config.
+- `src/services` — provider-neutral repositories, Supabase adapter, location/search/analytics.
+- `src/components`, `src/pages` — user, reporting, map, profile/admin UI.
+- `supabase/migrations` — schema, RLS, indexes and RPCs.
+- `supabase/functions` — privileged validation/enrichment/actions.
+- `scripts/build_gta_address_index.py` — Statistics Canada NAR → static GTA autocomplete index.
+- `.github/workflows` — CI and Pages deployment.
+- `tests`, `e2e` — automated coverage.
+
+---
+
+# Recommendation model
+
+The old idea of making `drive + queue + wash = done in` the primary promise is no longer the preferred product model because WashRadar intentionally stopped buying live traffic-route data.
+
+The primary ranking should rely on trustworthy data we own/control:
+
+- distance;
+- queue time/confidence;
+- wash duration estimate;
+- open/closed status;
+- type preference;
+- price/rating when available;
+- uncertainty penalties.
+
+Distance-derived drive time may exist internally as a rough heuristic but must be labelled as an estimate and must not be described as traffic-aware.
+
+The user's navigation app is the source of truth for actual traffic/ETA after **Directions** is selected.
+
+---
+
+# Maps, Google APIs and cost controls
+
+## Normal user session
+
+A normal GTA session should ideally require no billable Google call:
+
+| User action | Intended source |
+|---|---|
+| Open app | GitHub Pages + Supabase |
+| Use current location | Browser GPS |
+| Find nearby washes | Supabase catalogue |
+| Calculate distance | Local math |
+| Type/select GTA address | Static NAR index |
+| View queue | Supabase |
+| Submit queue | Supabase Edge Function |
+| Submit wash type | Supabase Edge Function |
+| Directions | User's maps app |
+
+## Google usage that may remain
+
+- rare address geocode fallback;
+- deliberate admin Places discovery;
+- selective Place Details refresh/enrichment.
+
+## Cost safety
+
+- Keep Google Cloud budget alerts enabled.
+- Keep provider/app quotas conservative.
+- Do not silently raise enrichment quotas to make a batch finish.
+- Cache reusable geocode results.
+- Prefer official/open static datasets whenever they can replace per-request APIs.
+
+---
+
+# Supabase usage philosophy
+
+The free plan is expected to be sufficient for the beta/initial launch if the app remains efficient.
+
+Watch:
+
+- database size;
+- monthly active users;
+- egress;
+- Edge Function invocations;
+- Realtime messages/connections;
+- Storage only if images/ad creatives are added.
+
+Queue history can eventually grow much more quickly than the wash catalogue. When necessary, retain detailed recent signals for a bounded period and aggregate older history by wash/time bucket rather than retaining unlimited raw events forever.
+
+Do not use Supabase database space for huge static national address datasets when GitHub Pages/CDN static partition files solve the same problem more cheaply.
+
+---
+
+# Advertising principles
+
+Ads are monetization, not ranking.
+
+Rules:
+
+- paid placements must be clearly labelled;
+- sponsored eligibility must not alter the organic best-wash score;
+- frequency caps should prevent domination;
+- geo targeting should be explicit and bounded;
+- consumer usefulness should stay ahead of advertiser density.
+
+---
+
+# Local development
+
+Requirements: Node.js 22.13+ and npm.
+
+```bash
+git clone <repository-url>
+cd washradar
+npm ci
+cp .env.example .env.local
+npm run dev
+```
 
 Quality commands:
 
-    npm run lint
-    npm run typecheck
-    npm test
-    npm run build
-    npm run test:e2e
+```bash
+npm run lint
+npm run typecheck
+npm test
+npm run build
+npm run test:e2e
+```
 
-Verify the GitHub project-pages path:
+Production deploys use GitHub Actions and `VITE_BASE_PATH=/` for `washradar.ca`.
 
-    VITE_DEMO_MODE=true VITE_BASE_PATH=/washradar/ npm run build
-    npm run preview
+---
 
-## Environment variables
+# Environment variables
 
-Copy .env.example to .env.local. Variables beginning with VITE_ are public.
+Variables beginning with `VITE_` are public browser configuration.
 
-| Variable | Required | Purpose |
-|---|---:|---|
-| VITE_DEMO_MODE | Yes | true for the fictional local demo; false in public production. |
-| VITE_BASE_PATH | Yes | /washradar/ for project Pages; / for washradar.ca. |
-| VITE_SUPABASE_URL | Production | Supabase project URL. |
-| VITE_SUPABASE_PUBLISHABLE_KEY | Production | Public browser key protected by RLS. |
-| VITE_GOOGLE_MAPS_BROWSER_KEY | Optional | Google map. Without it, the open tile-map provider is used. |
-| VITE_MAP_TILE_URL | Optional | Key-free fallback tile URL. Confirm the provider’s production terms. |
-| VITE_MAP_ATTRIBUTION | Optional | Required map attribution. |
-| VITE_SUPPORT_EMAIL | Recommended | Address displayed on Support. |
-| VITE_SENTRY_DSN | Optional | Reserved for a privacy-reviewed error provider. |
+| Variable | Purpose |
+|---|---|
+| `VITE_DEMO_MODE` | Local fictional demo vs production data. |
+| `VITE_BASE_PATH` | `/` for custom-domain production. |
+| `VITE_SUPABASE_URL` | Public Supabase project URL. |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Public browser key protected by RLS. |
+| `VITE_MAP_TILE_URL` | Optional open tile provider. |
+| `VITE_MAP_ATTRIBUTION` | Required attribution for tile provider. |
+| `VITE_SUPPORT_EMAIL` | Support address. |
 
-Set these with supabase secrets set, never in GitHub Pages:
+Server-side Supabase secrets include values such as:
 
-| Edge Function secret | Required | Purpose |
-|---|---:|---|
-| GOOGLE_MAPS_SERVER_KEY | Real search/import | Geocoding and controlled Places ingestion. |
-| DEVICE_HASH_SALT | Yes | Random 32+ byte value used before storing device hashes. |
-| ADMIN_EMAILS | Yes | Comma-separated moderation/ingestion allowlist. |
-| ALLOWED_ORIGINS | Yes | Comma-separated production and local origins. |
-| GOOGLE_GEOCODE_DAILY_LIMIT | Recommended | Application quota; defaults to 200. |
-| GOOGLE_PLACES_DAILY_LIMIT | Recommended | Discovery quota; defaults to 10. |
-| GOOGLE_ROUTES_DAILY_LIMIT | Recommended | Route Matrix quota; defaults to 300. |
+- `GOOGLE_MAPS_SERVER_KEY`
+- `DEVICE_HASH_SALT`
+- `ADMIN_EMAILS`
+- `ALLOWED_ORIGINS`
+- provider quota limits.
 
-Hosted Supabase supplies SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to Edge Functions.
+Never put a Supabase service-role key in the repository or frontend configuration.
 
-## Supabase setup
+---
 
-The free plan is sufficient for the initial launch.
+# PWA and GitHub Pages
 
-1. Create a dedicated project at https://supabase.com/dashboard. Do not reuse an unrelated project.
-2. Install the Supabase CLI from https://supabase.com/docs/guides/local-development/cli/getting-started.
-3. Link and deploy:
+The PWA uses a service worker, static app shell and a `404.html` SPA fallback for deep links.
 
-       supabase login
-       supabase link --project-ref YOUR_PROJECT_REF
-       supabase db push
-       supabase functions deploy queue-actions
-       supabase functions deploy ad-events --no-verify-jwt
-       supabase functions deploy geo-services --no-verify-jwt
-       supabase functions deploy analytics-events --no-verify-jwt
-       supabase functions deploy admin
-       supabase functions deploy wash-ingest
-       supabase secrets set DEVICE_HASH_SALT=... ADMIN_EMAILS=... ALLOWED_ORIGINS=...
+Production workflow: `.github/workflows/pages.yml`.
 
-4. In Authentication → Providers, enable Email and Anonymous Sign-ins.
-5. In Authentication → URL Configuration, set the final HTTPS Site URL and exact /auth/confirm redirect.
-6. Add your authenticated user UUID to private.admin_users in the SQL editor.
-7. Import reviewed production locations with the protected wash-ingest Edge Function. It never invents prices or wash types.
-8. Run Supabase security and performance advisors after migration.
+Remember that PR #13 added NAR-address-index generation to that workflow. Until the current generator failure is fixed, production deploys containing that step can fail before the Vite build.
 
-The migration enables RLS on every public table. Anonymous users can read only active production wash data and calculated estimates. Queue writes, moderation, reputation, ad metrics and ingestion use validated Edge Functions. User-owned favourites, alerts and preferences require matching auth.uid().
+---
 
-supabase/seed.sql intentionally contains no businesses. Demo places are never inserted into production.
+# Monitoring
 
-## Recommendation and queue model
+- **Supabase:** monitor database, egress, MAU, Edge invocations and Realtime usage.
+- **Google Cloud:** budget alerts + per-API quotas.
+- **GitHub Actions:** monitor CI/Pages failures and address-index cache behavior.
+- **Application:** keep analytics privacy-conscious; avoid storing raw home-address searches unnecessarily.
 
-    TOTAL TIME = drive time + queue time + wash duration
+---
 
-The score begins with total time and adds configurable distance, price and uncertainty penalties, rating and preferred-type adjustments, plus a small optional weather signal. Closed or unavailable washes receive an infinite score. src/domain/config.ts holds weights and wash-type defaults.
+# Troubleshooting / known gotchas
 
-The estimator keeps only the latest fresh signal from each contributor, heavily weights fresh verified reports and completed sessions, decays evidence over 60 minutes, blends with historical time buckets, reduces confidence when reports disagree, and requires two nearby closure/broken reports before changing status.
+- **Pages deploy fails before Vite build:** inspect `Build zero-cost GTA address autocomplete index`; current known blocker is NAR index generation after a successful download.
+- **No autocomplete dropdown:** confirm `public/address-index` generated chunks/manifest exist in the deployed site; fallback city data alone does not provide full household autocomplete.
+- **No production washes:** verify Supabase config/RLS and `nearby_washes_json` rather than re-running full Google import immediately.
+- **Queue report rejected/low-trust:** check anonymous auth, fresh GPS accuracy and proximity rules.
+- **Magic-link wrong route:** verify exact `https://washradar.ca/auth/confirm` redirect.
+- **Map unavailable:** verify the open tile-provider configuration/terms.
+- **Wash-type enrichment yields zero:** verify service-role grants and daily provider quota before rerunning.
 
-LIVE requires recent credible evidence. Older submissions become RECENT REPORT. Historical or weak data is labelled ESTIMATED, Historical Estimate or Limited Data.
+---
 
-The Edge Function enforces cooldowns, duplicate detection, six reports per hour, one active session, a 90-minute maximum wait and proximity validation. It stores a proximity class, never submitted GPS coordinates.
+# Decisions that should not be accidentally reversed
 
-## Maps, Places and cost controls
+1. **Do not restart the project.** Continue the existing repository, database and production deployment.
+2. **Do not re-enable automatic Google Routes for normal browsing.** Traffic belongs in the user's navigation app.
+3. **Do not treat unknown queue as zero.**
+4. **Do not make an account mandatory for basic browsing/contribution.**
+5. **Do not let ads influence organic ranking.**
+6. **Do not bulk-run expensive Google enrichment without a clear need.**
+7. **Do not store millions of GTA household addresses in Supabase by default.** Prefer static NAR partitions on GitHub Pages.
+8. **Do not restart the NAR autocomplete implementation from scratch.** Fix the current PR #13 build/index-generation failure.
+9. **Do not invent prices, wash types, hours or queue values when source data is missing.**
 
-Normal browsing reads canonical washes from Supabase. It does not call Nearby Search while a user pans. Only an administrator invokes wash-ingest. That request uses a minimal Google field mask, deduplicates by provider place ID and has a server-side daily limit.
+---
 
-Address geocoding occurs only after explicit search. Results cache for 30 days, requests are rate-limited per hashed client, and a global quota fails closed.
+# Recent milestone PRs
 
-The Google browser key must use HTTP referrer restrictions for localhost, GitHub Pages and the production domain, with only Maps JavaScript API enabled. The server key belongs only in Supabase secrets and enables only Geocoding API, Places API (New) and Routes API.
+- **PR #4** — production custom-domain configuration.
+- **PR #10** — ad placement preview page.
+- **PR #12** — zero-cost routing/address-search foundation; removes automatic Routes dependence.
+- **PR #13** — zero-cost GTA address autocomplete foundation using Statistics Canada NAR; merged, but its first Pages deployment failed during address-index generation and still needs debugging.
 
-In Google Cloud:
-
-1. Create a dedicated WashRadar project and billing account.
-2. Create separate browser and server keys.
-3. Set per-API quotas close to the application limits.
-4. Create budget alerts at C$5, C$20 and C$50.
-5. Review provider storage, attribution and display terms before scaling imports.
-
-Drive time uses a traffic-aware Route Matrix for the first ten nearby results when Routes is configured. Results cache by coarse origin cell for ten minutes. Without Routes, the UI clearly labels its distance-derived fallback.
-
-## Advertising
-
-The schema supports advertiser businesses, campaigns, creatives, placements, flexible radius/city/region targets, dates, priority, frequency caps, budgets, weekly/monthly/flat pricing metadata, impressions and clicks. Pricing is data, not hard-coded logic.
-
-Ads rotate on meaningful navigation through select_ad. Frequency caps prevent one advertiser from dominating. Every creative says Sponsored or Nearby offer. Ad eligibility is separate from recommendation scoring.
-
-The initial UI renders tasteful Explore and wash-detail offers. Campaign payment and self-service are intentionally deferred so the consumer launch stays focused.
-
-## PWA and GitHub Pages
-
-The manifest uses relative scope and start paths. The service worker caches the shell and versioned assets, uses network-first navigation, never caches Supabase queue responses as fresh data, provides an offline shell, handles future push events and removes old cache versions.
-
-The build copies index.html to 404.html so GitHub Pages can boot React Router on deep links. When adding a custom domain, set repository variable VITE_BASE_PATH=/, configure the domain in Pages and let GitHub create CNAME.
-
-### Publish
-
-1. Create a GitHub repository named washradar.
-2. Push main.
-3. In Settings → Pages, choose GitHub Actions as the source.
-4. Add repository variables VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY and VITE_SUPPORT_EMAIL.
-5. Add VITE_GOOGLE_MAPS_BROWSER_KEY as a repository secret only if using Google’s map.
-6. Run Deploy WashRadar to GitHub Pages or push to main.
-
-Use pull requests and keep main as production. Branch protection should require Quality checks.
-
-## Monitoring
-
-- **Supabase:** review database size, egress, Realtime connections and Edge invocations weekly; enable usage notifications.
-- **Google Cloud:** use budget alerts and per-API quotas. Edge limits do not replace Cloud quotas.
-- **GitHub:** review Actions usage; dependency caching and cancellation of superseded runs are configured.
-- **Application:** structured errors emit washradar:error; validated product analytics avoid a third-party behavioural tracker.
-
-If Google fails or quotas are exhausted, stored washes and queue data continue. Search explains the limitation and avoids retry loops.
-
-## Current limitations
-
-- A dedicated Supabase project and verified GTA import are required before production has real washes.
-- Route traffic is available only when the Google Routes API and quota are configured; the fallback is labelled estimated.
-- Background push delivery and scheduled alerts need a future push provider/cron; in-app alerts work.
-- Advertiser payment and self-service are outside the first consumer launch.
-- Physical iPhone Safari and Android device testing remains necessary.
-- Choose a production-suitable map tile provider before usage exceeds the fallback provider’s policy.
-
-## Troubleshooting
-
-- **Blank Pages route:** confirm VITE_BASE_PATH matches /repository/ and that 404.html exists.
-- **No production washes:** confirm demo mode is false, Supabase variables are set, migration ran and imported rows use production.
-- **Report rejected:** enable Anonymous Sign-ins and deploy queue-actions. Production queue timers require proximity.
-- **Magic-link wrong route:** allow the exact HTTPS /auth/confirm URL in Supabase.
-- **Map unavailable:** remove the Google key to use fallback tiles, or check API/referrer restrictions.
-- **Admin locked:** sign in with an ADMIN_EMAILS address and add its UUID to private.admin_users.
-
-## Connected production infrastructure
-
-The schema and six Edge Functions are deployed to Supabase project `mwyomijlvjfllgeniqcz` (Canada Central). `src/config/production.json` contains the intentionally public project URL and legacy anonymous browser key; this is not a privileged secret. All tables have RLS and privileged writes go through Edge Functions. The legacy anon key is used for compatibility with the JWT-verifying function gateway. Environment variables override these defaults. Never put a service-role key in that file.
-
-Before public launch:
-- In GitHub repository Settings → Pages, select **GitHub Actions** as the source.
-- In Supabase Authentication → URL Configuration, set Site URL to `https://mc140.github.io/washradar/` and add `https://mc140.github.io/washradar/auth/confirm` as an allowed redirect.
-- Enable anonymous sign-ins in Supabase Authentication if anonymous queue contributions are wanted; configure email delivery for magic links.
-- Set Edge Function secrets `ADMIN_EMAILS`, `DEVICE_HASH_SALT`, and `GOOGLE_MAPS_SERVER_KEY` when using Google discovery/search/routes. CORS defaults to `https://mc140.github.io`; override `ALLOWED_ORIGINS` for a custom domain.
-- Import and verify actual wash records. Production intentionally starts empty and never falls back to fictional demo listings.
-
-The security advisor reports intentionally public, bounded SECURITY DEFINER read functions and deny-by-default internal tables. Review their access boundaries when changing them: https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable
+This README should be updated whenever a major architectural decision, completed milestone, current blocker or future roadmap item changes so a new chat/session can continue without reconstructing project history.
