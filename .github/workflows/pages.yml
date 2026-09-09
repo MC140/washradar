@@ -21,6 +21,24 @@ jobs:
           cache: npm
       - run: npm ci
 
+      - name: Build zero-cost GTA postal index
+        run: |
+          mkdir -p .cache/postal
+          curl --fail --location --retry 4 --retry-delay 3 --connect-timeout 20 \
+            --output .cache/postal/CA.zip \
+            https://download.geonames.org/export/zip/CA.zip
+          python3 scripts/build_gta_postal_index.py \
+            --zip .cache/postal/CA.zip \
+            --output public/postal-index.json
+          python3 - <<'PY'
+          import json
+          data=json.load(open('public/postal-index.json', encoding='utf-8'))
+          keys={row[0] for row in data.get('areas', [])}
+          assert 'm1x' in keys, 'M1X missing from postal index'
+          assert len(keys) >= 100, f'postal index unexpectedly small: {len(keys)}'
+          print(f'Postal index validated: {len(keys)} FSAs; M1X present')
+          PY
+
       - name: Restore generated GTA address index
         id: address-index-cache
         uses: actions/cache@v4
