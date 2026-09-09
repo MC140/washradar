@@ -14,11 +14,11 @@ async function resetAndUseLocation(page: import('@playwright/test').Page) {
   await expect(page.locator('.wash-card').first()).toBeVisible();
 }
 
-test('guest browse → save → saved → details journey works', async ({page}) => {
+test('guest browse → save → reload saved → details journey works', async ({page}) => {
   await resetAndUseLocation(page);
   await expect(page.getByText('DEMO MODE')).toBeVisible();
   await page.getByLabel('Save this wash').first().click();
-  await page.locator('a[href="/saved"]:visible').first().click();
+  await page.goto('/saved');
   await expect(page.getByRole('heading', {name: 'Saved washes.'})).toBeVisible();
   await expect(page.getByText('ClearRoute Touchless').first()).toBeVisible();
   await page.getByRole('link', {name: 'Details'}).first().click();
@@ -43,13 +43,13 @@ test('verified queue timer can start and finish near the wash', async ({page}) =
   await expect(page.getByText(/YOU’VE BEEN WAITING/)).toBeHidden();
 });
 
-test('queue target journey is explicitly in-app and persists in the SPA', async ({page}) => {
+test('queue target is in-app and survives a reload', async ({page}) => {
   await resetAndUseLocation(page);
   await page.getByRole('link', {name: 'Details'}).first().click();
   await page.getByRole('button', {name: /Alert me/}).click();
   await expect(page.getByText(/Check WashRadar/i)).toBeVisible();
   await page.getByRole('button', {name: 'Save queue target'}).click();
-  await page.locator('a[href="/alerts"]:visible').first().click();
+  await page.goto('/alerts');
   await expect(page.getByRole('heading', {name: 'Save a queue target.'})).toBeVisible();
   await expect(page.getByText('ClearRoute Touchless').first()).toBeVisible();
   await expect(page.getByText(/TARGET (MET|SAVED)/).first()).toBeVisible();
