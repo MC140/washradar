@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {estimateQueue, freshnessWeight, hasQueueEvidence, queueBucketToWait, rankWashes, totalTime} from '../src/domain/engine.ts';
+import {contributorLevel, initials} from '../src/domain/community.ts';
 import {DEMO_ORIGIN, DEMO_WASHES} from '../src/data/demo.ts';
 
 const signal = (washId, actorHash, waitMinutes, age, extras = {}) => ({
@@ -89,4 +90,16 @@ test('closed and unavailable washes stay ineligible for recommendation', () => {
   const unavailable = {...DEMO_WASHES[1], status: 'unavailable'};
   const ranked = rankWashes([closed, unavailable], [], DEMO_ORIGIN);
   assert.equal(ranked.every((item) => item.score === Infinity), true);
+});
+test('Radar Points map deterministically to contributor levels', () => {
+  assert.equal(contributorLevel(0).name, 'New Scout');
+  assert.equal(contributorLevel(249).level, 1);
+  assert.equal(contributorLevel(250).name, 'Queue Scout');
+  assert.equal(contributorLevel(750).name, 'Radar Regular');
+  assert.equal(contributorLevel(3000).name, 'WashRadar Hero');
+  assert.equal(contributorLevel(3000).pointsToNext, 0);
+});
+test('profile initials prefer display name and safely fall back to email', () => {
+  assert.equal(initials('Manohar Chekka', 'x@example.com'), 'MC');
+  assert.equal(initials(null, 'radar@example.com'), 'RA');
 });
