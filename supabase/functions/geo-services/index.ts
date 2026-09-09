@@ -22,7 +22,10 @@ Deno.serve(async (request) => {
   const tenMinutesAgo = new Date(Date.now() - 10 * 60_000).toISOString();
   const {count} = await db.from('api_request_log').select('id', {head: true, count: 'exact'}).eq('provider', 'google-geocode').eq('actor_hash', actorHash).gte('created_at', tenMinutesAgo);
   if ((count ?? 0) >= 8) return json(request, {error: 'Search limit reached. Try again shortly.'}, 429);
-  const normalized = parsed.data.query.toLowerCase().replace(/\s+/g, ' ');
+
+  // Keep only a salted hash of a fallback geocode query. Exact home-address text is not
+  // needed to serve the cache and therefore should not be retained in our database.
+  const normalized = parsed.data.query.toLowerCase().replace(/\s+/g, ' ').trim();
   const queryHash = await hashValue(normalized);
   const {data: cached} = await db.from('geocode_cache').select('latitude,longitude').eq('query_hash', queryHash).gt('expires_at', new Date().toISOString()).maybeSingle();
   if (cached) return json(request, {point: {lat: Number(cached.latitude), lng: Number(cached.longitude)}, source: 'cache'});
@@ -32,6 +35,7 @@ Deno.serve(async (request) => {
   const {data: quota} = await db.rpc('consume_api_quota', {p_provider: 'google-geocode', p_daily_limit: Number(Deno.env.get('GOOGLE_GEOCODE_DAILY_LIMIT') || 200)});
   if (!quota) return json(request, {error: 'Address search is resting for today. Use current location instead.'}, 429);
   await db.from('api_request_log').insert({provider: 'google-geocode', actor_hash: actorHash});
+
   const url = new URL('https://maps.googleapis.com/maps/api/geocode/json');
   url.searchParams.set('address', parsed.data.query);
   url.searchParams.set('components', 'country:CA');
@@ -52,11 +56,12 @@ Deno.serve(async (request) => {
     if (!location) return json(request, {point: null});
     await db.from('geocode_cache').upsert({
       query_hash: queryHash,
-      query_normalized: normalized,
+      query_normalized: null,
       latitude: location.lat,
       longitude: location.lng,
       provider: 'google',
-      expires_at: new Date(Date.now() + 30 * 86400_000).toISOString(),
+      // Address coordinates are stable. A long cache sharply reduces repeat fallback calls.
+      expires_at: new Date(Date.now() + 365 * 86400_000).toISOString(),
     });
     return json(request, {point: {lat: location.lat, lng: location.lng}, source: 'google'});
   } catch (error) {
