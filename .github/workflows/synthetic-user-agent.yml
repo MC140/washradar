@@ -1,0 +1,63 @@
+name: WashRadar synthetic user agent
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 13 * * *'
+  workflow_run:
+    workflows: ["Deploy WashRadar to GitHub Pages"]
+    types: [completed]
+  pull_request:
+    paths:
+      - 'scripts/synthetic-user-agent.ts'
+      - '.github/workflows/synthetic-user-agent.yml'
+      - 'playwright.live.config.ts'
+      - 'package.json'
+      - 'package-lock.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: synthetic-user-agent-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  test-like-a-user:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || 'main' }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run WashRadar synthetic user agent
+        run: npx tsx scripts/synthetic-user-agent.ts
+
+      - name: Add report to workflow summary
+        if: always()
+        shell: bash
+        run: |
+          if [ -f synthetic-user-results/report.md ]; then
+            cat synthetic-user-results/report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload screenshots and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: washradar-synthetic-user-report-${{ github.run_id }}
+          path: synthetic-user-results
+          if-no-files-found: warn
+          retention-days: 14
