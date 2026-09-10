@@ -48,8 +48,9 @@ async function main() {
     await action.click();
     const ratingDialog = page.getByRole('dialog', {name: /Rate this wash|Edit my WashRadar rating/i});
     await ratingDialog.waitFor({state: 'visible', timeout: 10_000});
-    await ratingDialog.getByRole('group', {name: 'Overall rating'}).waitFor({state: 'visible'});
-    await ratingDialog.getByRole('button', {name: '5 stars'}).waitFor({state: 'visible'});
+    const overallGroup = ratingDialog.getByRole('group', {name: 'Overall rating'});
+    await overallGroup.waitFor({state: 'visible'});
+    await overallGroup.getByRole('button', {name: '5 stars'}).waitFor({state: 'visible'});
     await ratingDialog.getByRole('button', {name: 'Clean facility'}).waitFor({state: 'visible'});
 
     if (await ratingDialog.locator('textarea').count() > 0) {
