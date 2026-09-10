@@ -34,7 +34,7 @@ function reporterLabel(wash: RankedWash) {
 export function WashCard({
   wash,
   best = false,
-  bestWait = false,
+  bestWait = best,
   saved,
   onSave,
   onReport,
