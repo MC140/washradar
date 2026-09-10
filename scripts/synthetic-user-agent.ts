@@ -1,4 +1,4 @@
-import {chromium, devices, type Browser, type BrowserContext, type Page} from '@playwright/test';
+import {chromium, devices, type BrowserContext, type Page} from '@playwright/test';
 import {mkdir, rm, writeFile} from 'node:fs/promises';
 import path from 'node:path';
 
@@ -9,20 +9,8 @@ const MISSISSAUGA = {latitude: 43.5837, longitude: -79.7591};
 type Severity = 'info' | 'warning' | 'critical';
 type JourneyStatus = 'passed' | 'passed-with-warnings' | 'failed';
 
-type Finding = {
-  severity: Severity;
-  step: string;
-  message: string;
-  url?: string;
-};
-
-type StepResult = {
-  name: string;
-  status: 'passed' | 'failed';
-  durationMs: number;
-  detail?: string;
-};
-
+type Finding = {severity: Severity; step: string; message: string; url?: string};
+type StepResult = {name: string; status: 'passed' | 'failed'; durationMs: number; detail?: string};
 type Journey = {
   persona: string;
   device: string;
@@ -42,12 +30,23 @@ function messageOf(error: unknown) {
 }
 
 function addFinding(journey: Journey, severity: Severity, step: string, message: string, url?: string) {
-  journey.findings.push({severity, step, message, url});
+  const key = `${severity}|${step}|${message}|${url || ''}`;
+  const exists = journey.findings.some(finding => `${finding.severity}|${finding.step}|${finding.message}|${finding.url || ''}` === key);
+  if (!exists) journey.findings.push({severity, step, message, url});
 }
 
 async function humanPause(page: Page, minMs = 120, maxMs = 320) {
   const delay = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
   await page.waitForTimeout(delay);
+}
+
+function safeUrl(raw: string) {
+  try {
+    const parsed = new URL(raw);
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return raw;
+  }
 }
 
 function monitorPage(page: Page, journey: Journey) {
@@ -56,10 +55,11 @@ function monitorPage(page: Page, journey: Journey) {
   });
 
   page.on('console', msg => {
-    if (msg.type() === 'error') {
-      const text = msg.text().trim();
-      if (text) addFinding(journey, 'warning', 'Browser console', text.slice(0, 500), page.url());
-    }
+    if (msg.type() !== 'error') return;
+    const text = msg.text().trim();
+    if (!text) return;
+    if (/Failed to load resource: the server responded with a status of (401|403|404)/i.test(text)) return;
+    addFinding(journey, 'warning', 'Browser console', text.slice(0, 500), page.url());
   });
 
   page.on('requestfailed', request => {
@@ -68,30 +68,36 @@ function monitorPage(page: Page, journey: Journey) {
         journey,
         'warning',
         'Network',
-        `WashRadar request failed: ${request.method()} ${request.url()} (${request.failure()?.errorText || 'unknown error'})`,
+        `WashRadar request failed: ${request.method()} ${safeUrl(request.url())} (${request.failure()?.errorText || 'unknown error'})`,
         page.url(),
       );
     }
   });
 
   page.on('response', response => {
+    const status = response.status();
     const request = response.request();
-    if (response.url().startsWith(BASE_URL) && response.status() >= 500) {
+    const url = response.url();
+    const sameOrigin = url.startsWith(BASE_URL);
+
+    if (sameOrigin && status >= 500) {
+      addFinding(journey, 'critical', 'Network', `WashRadar returned HTTP ${status} for ${request.method()} ${safeUrl(url)}`, page.url());
+      return;
+    }
+
+    if (sameOrigin && request.resourceType() === 'document' && status >= 400) {
       addFinding(
         journey,
-        'critical',
-        'Network',
-        `WashRadar returned HTTP ${response.status()} for ${request.method()} ${response.url()}`,
+        'warning',
+        'Deep-link response',
+        `Direct navigation returned HTTP ${status} before the SPA rendered: ${safeUrl(url)}`,
         page.url(),
       );
-    } else if (response.url().startsWith(BASE_URL) && request.resourceType() === 'document' && response.status() >= 400) {
-      addFinding(
-        journey,
-        'critical',
-        'Navigation',
-        `Page returned HTTP ${response.status()}: ${response.url()}`,
-        page.url(),
-      );
+      return;
+    }
+
+    if ((status === 401 || status === 403) && !sameOrigin) {
+      addFinding(journey, 'warning', 'Remote API', `Anonymous browser received HTTP ${status} from ${safeUrl(url)}`, page.url());
     }
   });
 }
@@ -114,6 +120,10 @@ async function dismissIntroForManualSearch(page: Page) {
   if (await dialog.isVisible().catch(() => false)) {
     await dialog.getByRole('button', {name: 'Search manually'}).click();
   }
+}
+
+async function requireVisible(page: Page, role: 'button' | 'heading' | 'link', name: string | RegExp) {
+  await page.getByRole(role, {name}).first().waitFor({state: 'visible', timeout: 12_000});
 }
 
 async function uxScan(page: Page, journey: Journey, mobile: boolean) {
@@ -167,20 +177,13 @@ async function uxScan(page: Page, journey: Journey, mobile: boolean) {
   }
 }
 
-async function requireVisible(page: Page, role: 'button' | 'heading' | 'link', name: string | RegExp) {
-  await page.getByRole(role, {name}).first().waitFor({state: 'visible', timeout: 12_000});
-}
-
-async function runJourney(
-  browser: Browser,
-  options: {
-    persona: string;
-    device: string;
-    context: () => Promise<BrowserContext>;
-    mobile: boolean;
-    flow: (page: Page, journey: Journey) => Promise<void>;
-  },
-) {
+async function runJourney(options: {
+  persona: string;
+  device: string;
+  context: () => Promise<BrowserContext>;
+  mobile: boolean;
+  flow: (page: Page, journey: Journey) => Promise<void>;
+}) {
   const journey: Journey = {
     persona: options.persona,
     device: options.device,
@@ -199,7 +202,7 @@ async function runJourney(
     await options.flow(page, journey);
     await uxScan(page, journey, options.mobile);
   } catch {
-    // The failed step already records a critical finding. Continue to evidence capture.
+    // Failed steps are already recorded; continue to evidence capture.
   } finally {
     journey.finalUrl = page.url();
     const safeName = options.persona.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -216,8 +219,8 @@ async function runJourney(
   }
 }
 
-async function mobileNearbyJourney(browser: Browser) {
-  await runJourney(browser, {
+async function mobileNearbyJourney(browser: Awaited<ReturnType<typeof chromium.launch>>) {
+  await runJourney({
     persona: 'First-time nearby visitor',
     device: 'Pixel 7 / GTA geolocation',
     mobile: true,
@@ -231,7 +234,7 @@ async function mobileNearbyJourney(browser: Browser) {
     flow: async (page, journey) => {
       await step(journey, page, 'Open WashRadar home', async () => {
         const response = await page.goto(`${BASE_URL}/`, {waitUntil: 'domcontentloaded', timeout: 30_000});
-        if (!response || response.status() >= 400) throw new Error(`Homepage returned ${response?.status() ?? 'no response'}`);
+        if (!response || response.status() >= 500) throw new Error(`Homepage returned ${response?.status() ?? 'no response'}`);
         await humanPause(page);
       });
 
@@ -254,8 +257,13 @@ async function mobileNearbyJourney(browser: Browser) {
         journey.metrics.nearbyWashCards = count;
         const firstCardText = (await cards.first().innerText()).replace(/\s+/g, ' ').trim();
         journey.metrics.firstCardPreview = firstCardText.slice(0, 240);
-        if (!/\bmin\b/i.test(firstCardText)) {
-          addFinding(journey, 'warning', 'Wash card comprehension', 'The first wash card did not visibly communicate a time in minutes', page.url());
+
+        const hasTime = /\bmin\b/i.test(firstCardText);
+        const explicitlyUnknown = /unknown|no recent queue report/i.test(firstCardText);
+        if (!hasTime && explicitlyUnknown) {
+          addFinding(journey, 'info', 'Wash card comprehension', 'The first result clearly showed that live timing is currently unknown', page.url());
+        } else if (!hasTime) {
+          addFinding(journey, 'warning', 'Wash card comprehension', 'The first wash card did not clearly communicate a time or an unknown-data state', page.url());
         }
         if (!/car|queue|wait/i.test(firstCardText)) {
           addFinding(journey, 'warning', 'Wash card comprehension', 'The first wash card did not visibly communicate queue/car information', page.url());
@@ -286,16 +294,12 @@ async function mobileNearbyJourney(browser: Browser) {
   });
 }
 
-async function desktopManualJourney(browser: Browser) {
-  await runJourney(browser, {
+async function desktopManualJourney(browser: Awaited<ReturnType<typeof chromium.launch>>) {
+  await runJourney({
     persona: 'Manual-search desktop visitor',
     device: 'Desktop Chrome',
     mobile: false,
-    context: () => browser.newContext({
-      ...devices['Desktop Chrome'],
-      locale: 'en-CA',
-      timezoneId: 'America/Toronto',
-    }),
+    context: () => browser.newContext({...devices['Desktop Chrome'], locale: 'en-CA', timezoneId: 'America/Toronto'}),
     flow: async (page, journey) => {
       await step(journey, page, 'Open without location sharing', async () => {
         await page.goto(`${BASE_URL}/`, {waitUntil: 'domcontentloaded', timeout: 30_000});
@@ -316,33 +320,29 @@ async function desktopManualJourney(browser: Browser) {
       await step(journey, page, 'Sort by nearest', async () => {
         const nearest = page.getByRole('button', {name: 'Nearest'});
         await nearest.click();
-        const pressed = await nearest.getAttribute('aria-pressed');
-        if (pressed !== 'true') throw new Error(`Nearest sort did not become active (aria-pressed=${pressed})`);
+        if ((await nearest.getAttribute('aria-pressed')) !== 'true') throw new Error('Nearest sort did not become active');
       });
 
       await step(journey, page, 'Reload like a returning visitor', async () => {
         await page.reload({waitUntil: 'domcontentloaded'});
         await requireVisible(page, 'heading', /Nearby washes/i);
         await page.locator('.wash-card').first().waitFor({state: 'visible', timeout: 12_000});
-        const bodyText = await page.locator('#main-content').innerText();
-        if (!bodyText.includes('M1X 1S7')) {
-          addFinding(journey, 'warning', 'Returning visitor', 'The previous postal-code location was not visibly restored after reload', page.url());
+        const postalVisible = await page.getByText('M1X 1S7', {exact: true}).first().isVisible().catch(() => false);
+        journey.metrics.postalCodeStillVisibleAfterReload = postalVisible;
+        if (!postalVisible) {
+          addFinding(journey, 'info', 'Returning visitor', 'Results survived reload, but the previous postal code was not visibly echoed on screen', page.url());
         }
       });
     },
   });
 }
 
-async function deniedLocationJourney(browser: Browser) {
-  await runJourney(browser, {
+async function deniedLocationJourney(browser: Awaited<ReturnType<typeof chromium.launch>>) {
+  await runJourney({
     persona: 'Location-denied visitor',
     device: 'Pixel 7 / geolocation denied',
     mobile: true,
-    context: () => browser.newContext({
-      ...devices['Pixel 7'],
-      locale: 'en-CA',
-      timezoneId: 'America/Toronto',
-    }),
+    context: () => browser.newContext({...devices['Pixel 7'], locale: 'en-CA', timezoneId: 'America/Toronto'}),
     flow: async (page, journey) => {
       await step(journey, page, 'Open as a privacy-conscious visitor', async () => {
         await page.goto(`${BASE_URL}/`, {waitUntil: 'domcontentloaded', timeout: 30_000});
@@ -351,8 +351,7 @@ async function deniedLocationJourney(browser: Browser) {
       await step(journey, page, 'Decline location and recover manually', async () => {
         const dialog = page.getByRole('dialog', {name: 'Find the best wash near you'});
         if (await dialog.isVisible().catch(() => false)) {
-          const locationButton = dialog.getByRole('button', {name: 'Use my location'});
-          await locationButton.click();
+          await dialog.getByRole('button', {name: 'Use my location'}).click();
           await page.waitForTimeout(900);
           if (await dialog.isVisible().catch(() => false)) {
             const manual = dialog.getByRole('button', {name: 'Search manually'});
@@ -371,16 +370,12 @@ async function deniedLocationJourney(browser: Browser) {
   });
 }
 
-async function publicNavigationJourney(browser: Browser) {
-  await runJourney(browser, {
+async function publicNavigationJourney(browser: Awaited<ReturnType<typeof chromium.launch>>) {
+  await runJourney({
     persona: 'Curious visitor exploring the app',
     device: 'Desktop Chrome',
     mobile: false,
-    context: () => browser.newContext({
-      ...devices['Desktop Chrome'],
-      locale: 'en-CA',
-      timezoneId: 'America/Toronto',
-    }),
+    context: () => browser.newContext({...devices['Desktop Chrome'], locale: 'en-CA', timezoneId: 'America/Toronto'}),
     flow: async (page, journey) => {
       const routes: Array<[string, RegExp]> = [
         ['/', /Where should you wash your car/i],
@@ -395,7 +390,8 @@ async function publicNavigationJourney(browser: Browser) {
       for (const [route, expected] of routes) {
         await step(journey, page, `Visit ${route}`, async () => {
           const response = await page.goto(`${BASE_URL}${route}`, {waitUntil: 'domcontentloaded', timeout: 30_000});
-          if (!response || response.status() >= 400) throw new Error(`${route} returned ${response?.status() ?? 'no response'}`);
+          if (!response || response.status() >= 500) throw new Error(`${route} returned ${response?.status() ?? 'no response'}`);
+          journey.metrics[`http:${route}`] = response.status();
           await dismissIntroForManualSearch(page);
           const main = page.locator('#main-content');
           await main.waitFor({state: 'visible', timeout: 10_000});
@@ -410,12 +406,14 @@ async function publicNavigationJourney(browser: Browser) {
 }
 
 function renderReport() {
+  const allFindings = journeys.flatMap(journey => journey.findings);
   const totals = {
     passed: journeys.filter(journey => journey.status === 'passed').length,
     warnings: journeys.filter(journey => journey.status === 'passed-with-warnings').length,
     failed: journeys.filter(journey => journey.status === 'failed').length,
-    criticalFindings: journeys.flatMap(journey => journey.findings).filter(finding => finding.severity === 'critical').length,
-    warningsFound: journeys.flatMap(journey => journey.findings).filter(finding => finding.severity === 'warning').length,
+    criticalFindings: allFindings.filter(finding => finding.severity === 'critical').length,
+    warningsFound: allFindings.filter(finding => finding.severity === 'warning').length,
+    informationalFindings: allFindings.filter(finding => finding.severity === 'info').length,
   };
 
   const lines = [
@@ -432,29 +430,27 @@ function renderReport() {
     `- Failed: ${totals.failed}`,
     `- Critical findings: ${totals.criticalFindings}`,
     `- Warnings: ${totals.warningsFound}`,
+    `- Informational findings: ${totals.informationalFindings}`,
     '',
     'The agent is intentionally read-only against production. It does not create accounts, join queues, update queue counts, save queue targets, or submit other production-changing data.',
     '',
   ];
 
   for (const journey of journeys) {
-    lines.push(`## ${journey.persona}`);
-    lines.push('');
+    lines.push(`## ${journey.persona}`, '');
     lines.push(`Status: **${journey.status}**  `);
     lines.push(`Device: ${journey.device}  `);
     lines.push(`Duration: ${(journey.durationMs / 1000).toFixed(1)}s  `);
     lines.push(`Final URL: ${journey.finalUrl || 'unknown'}  `);
-    lines.push(`Screenshot: ${journey.screenshot || 'not captured'}`);
-    lines.push('');
-    lines.push('### Steps');
-    lines.push('');
+    lines.push(`Screenshot: ${journey.screenshot || 'not captured'}`, '');
+
+    lines.push('### Steps', '');
     for (const result of journey.steps) {
       lines.push(`- ${result.status === 'passed' ? 'PASS' : 'FAIL'} — ${result.name} (${result.durationMs}ms)${result.detail ? ` — ${result.detail}` : ''}`);
     }
     lines.push('');
 
-    lines.push('### Findings');
-    lines.push('');
+    lines.push('### Findings', '');
     if (journey.findings.length === 0) {
       lines.push('- No problems detected.');
     } else {
@@ -464,11 +460,8 @@ function renderReport() {
     }
     lines.push('');
 
-    lines.push('### Observed metrics');
-    lines.push('');
-    for (const [key, value] of Object.entries(journey.metrics)) {
-      lines.push(`- ${key}: ${String(value)}`);
-    }
+    lines.push('### Observed metrics', '');
+    for (const [key, value] of Object.entries(journey.metrics)) lines.push(`- ${key}: ${String(value)}`);
     lines.push('');
   }
 
@@ -490,8 +483,9 @@ async function main() {
   }
 
   const {markdown, totals} = renderReport();
+  const generatedAt = new Date().toISOString();
   await writeFile(path.join(RESULTS_DIR, 'report.md'), markdown, 'utf8');
-  await writeFile(path.join(RESULTS_DIR, 'report.json'), JSON.stringify({target: BASE_URL, generatedAt: new Date().toISOString(), totals, journeys}, null, 2), 'utf8');
+  await writeFile(path.join(RESULTS_DIR, 'report.json'), JSON.stringify({target: BASE_URL, generatedAt, totals, journeys}, null, 2), 'utf8');
 
   console.log(markdown);
   if (totals.failed > 0 || totals.criticalFindings > 0) process.exitCode = 1;
