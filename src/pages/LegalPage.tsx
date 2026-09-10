@@ -8,7 +8,7 @@ const pages = {
       ['Location', 'Location is used when you request nearby results, directions or queue validation. We do not continuously track you in the background. Queue reports retain a proximity result such as “nearby” or “remote”; exact coordinates are not shown publicly.'],
       ['Accounts and device data', 'Browsing does not require an account. If you sign in, Supabase Authentication stores your email and account identifier. A random device identifier helps enforce report cooldowns and one active queue timer; server systems store only a one-way hash.'],
       ['Analytics and advertising', 'Product analytics record feature events and coarse areas without an advertising identity. Sponsored content records impressions and clicks to prevent repetition and measure campaign performance. We do not sell precise location history.'],
-      ['Retention and control', 'Operational reports expire from live calculations automatically. Aggregated historical statistics may remain without precise location data. You may request account deletion or correction through support.'],
+      ['Retention and control', 'Operational reports expire from live calculations automatically. When an account is deleted, account/profile data is removed and contribution records that must remain for queue integrity may be retained only in de-identified form. Signed-in users can start permanent account deletion from Profile; the same instructions are available at /account-deletion.'],
     ],
   },
   terms: {
@@ -39,9 +39,19 @@ const pages = {
       ['Safety', 'Park safely before using WashRadar or submitting a report. For emergencies, contact local emergency services.'],
     ],
   },
+  accountDeletion: {
+    title: 'Delete Your WashRadar Account',
+    lead: 'WashRadar lets you permanently delete a signed-in account from inside the product.',
+    sections: [
+      ['Delete in the app', 'Sign in, open Profile, go to Account & privacy, choose Delete account, review the warning and confirm permanent deletion. You will be signed out after the deletion finishes.'],
+      ['What is deleted', 'Your Supabase authentication account and account-owned profile, favourites, queue targets, challenge progress, Radar Points and saved vehicle data are deleted.'],
+      ['De-identified contribution history', 'Queue and wash-type observations may remain without your account identifier when needed to preserve aggregate queue integrity, abuse prevention and historical statistics. They are no longer attached to your deleted account.'],
+      ['Need help?', 'If self-service deletion cannot complete, contact ' + appConfig.supportEmail + ' from the email associated with the account. Business-owner accounts may require support so active business records are not accidentally removed.'],
+    ],
+  },
 } as const;
 
 export function LegalPage({page}: {page: keyof typeof pages}) {
   const content = pages[page];
-  return <article className="legal-page"><p className="eyebrow">WASHRADAR TRUST CENTRE</p><h1>{content.title}</h1><p className="legal-lead">{content.lead}</p><p className="legal-date">Effective September 7, 2026</p>{content.sections.map(([title, body]) => <section key={title}><h2>{title}</h2><p>{body}</p></section>)}</article>;
+  return <article className="legal-page"><p className="eyebrow">WASHRADAR TRUST CENTRE</p><h1>{content.title}</h1><p className="legal-lead">{content.lead}</p><p className="legal-date">Effective September 10, 2026</p>{content.sections.map(([title, body]) => <section key={title}><h2>{title}</h2><p>{body}</p></section>)}</article>;
 }
