@@ -7,6 +7,7 @@ import {installPostalSearch} from './services/postalSearch';
 import './styles.css';
 import './ui-polish.css';
 import './release-polish.css';
+import './native-hardening.css';
 
 installCostOptimizations();
 installAddressAutocomplete();
