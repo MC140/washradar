@@ -33,10 +33,15 @@ self.addEventListener('fetch', (event) => {
   }
 });
 self.addEventListener('push', (event) => {
-  const data = event.data ? event.data.json() : {};
-  event.waitUntil(self.registration.showNotification(data.title || 'WashRadar', {body: data.body || 'A wash you follow has an update.', icon: local('icon-192.png'), badge: local('icon-192.png'), data: data.url || local('./')}));
+  const data = event.data?.json() ?? {};
+  event.waitUntil(self.registration.showNotification(data.title ?? 'WashRadar', {
+    body: data.body ?? 'A saved wash has reached your queue target.',
+    icon: local('icon-192.png'),
+    badge: local('icon-192.png'),
+    data: {url: data.url ?? local('alerts')},
+  }));
 });
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  event.waitUntil(self.clients.openWindow(event.notification.data || local('./')));
+  event.waitUntil(self.clients.openWindow(event.notification.data.url));
 });
