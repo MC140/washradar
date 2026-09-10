@@ -17,19 +17,24 @@ Its differentiated value is **queue intelligence + trustworthy wash information*
 Before doing project work:
 
 1. Read current `main`.
-2. Check the newest merged PRs.
-3. Check the latest **Deploy WashRadar to GitHub Pages** workflow.
-4. Read `docs/AUTH.md` for account work.
-5. Read `docs/SCALING.md` for capacity work.
-6. Treat GitHub `main`, the production Supabase schema and GitHub Actions as final source of truth.
+2. Check the newest merged and open PRs.
+3. Compare those PRs with this README; if the README is stale, update it before relying on old handoff notes.
+4. Check the latest **Deploy WashRadar to GitHub Pages** workflow plus the latest production/synthetic-user audits.
+5. Read `docs/AUTH.md` for account work.
+6. Read `docs/SCALING.md` for capacity work.
+7. Treat GitHub `main`, the production Supabase schema, GitHub Actions and observed production behavior as final source of truth.
 
 Do not restart old/superseded work merely because it appears in historical notes.
 
 ---
 
-# Current production baseline — 2026-09-09
+# Current production baseline — 2026-09-10
 
-Production includes feature work through **PR #45**.
+Production currently runs `main` through **PR #47**.
+
+- **PR #45** remains the latest substantial user-facing feature release.
+- **PR #46** is a documentation-only follow-up that recorded PR #45 as the production feature baseline.
+- **PR #47** adds the synthetic normal-user testing agent and is merged/deployed successfully. Quality checks, build, GitHub Pages deploy, synthetic-user testing and post-deploy production audit all passed after the merge.
 
 ## Friends-beta account model
 
@@ -110,7 +115,7 @@ Wait-time number colors are semantic: **green 0–15 min**, **amber 16–39 min*
 
 ---
 
-# Recent release hardening — PRs #33–#45
+# Recent release hardening — PRs #33–#47
 
 - **PR #33** extended anonymous-account merge claims to 24 hours.
 - **PR #35** fixed cold-start/shared wash detail loading, hardened a privileged wash-type RPC, restored Saved/queue-target state on reload, clarified in-app-only queue targets, and hardened friends-beta auth behavior.
@@ -123,8 +128,12 @@ Wait-time number colors are semantic: **green 0–15 min**, **amber 16–39 min*
 - **PR #43** compacted the cards further using the approved reference hierarchy while keeping the existing WashRadar light theme: business name + directions + distance on the left, dominant estimated wait + cars ahead on the right, a thin freshness/footer row and equal-width actions.
 - **PR #44** refined the compact card: the featured recommendation reliably shows `Best right now`, the favourite heart moved to the card's top-right, and the duration wording became `Queue + wash · ~X min` with `+ drive time` separate.
 - **PR #45** persists manual searched areas and sort choice across refresh, replaces the sort dropdown with quick-sort buttons, and gives `Update queue` a stable brand-green contribution treatment independent of wait severity.
+- **PR #46** is the documentation-only follow-up that marked PR #45 as the current production feature baseline.
+- **PR #47** adds a read-only synthetic normal-user agent using real Chromium. It exercises first-time mobile geolocation, manual postal search + sorting, denied-location recovery and public/account navigation; captures screenshots and runtime/network/mobile-UX evidence; runs on demand, after successful production deployments and daily; and does not write synthetic accounts or queue activity into production.
 
-Current production validation includes deterministic queue/trust tests, desktop/mobile live-user journeys, post-deploy production audit, and a synthetic transactional challenge lifecycle audit that was rolled back after testing.
+Current production validation includes deterministic queue/trust tests, desktop/mobile live-user journeys, post-deploy production audit, the PR #47 synthetic normal-user agent, and a synthetic transactional challenge lifecycle audit that was rolled back after testing.
+
+The PR #47 agent is a continuous regression guardrail, not a substitute for physical testing. Real-phone testing at actual wash locations remains the highest-value next phase for validating location permission, manual search, queue reporting, `I'm in line`, timing comprehension and Maps hand-off.
 
 The challenge audit covered remote-vs-nearby qualification, distinct-wash counting, verified waits, wash-type confirmation, three-day progress, disabled contributions, one-time rewards, daily point caps, post-completion anti-farming and cross-user isolation.
 
@@ -201,8 +210,8 @@ Main folders:
 - `supabase/migrations` — schema/RLS/indexes/RPCs/triggers.
 - `supabase/functions` — privileged actions/enrichment.
 - `scripts` — static index generators and scale-smoke script.
-- `.github/workflows` — CI, Pages deployment, post-deploy live audit and production scale smoke.
-- `release-tests` — production Playwright user journeys.
+- `.github/workflows` — CI, Pages deployment, post-deploy live audit, synthetic normal-user agent and production scale smoke.
+- `release-tests` — production Playwright user journeys and synthetic-user journey/reporting logic.
 - `docs/AUTH.md` — account/auth security model.
 - `docs/SCALING.md` — capacity/upgrade runbook.
 - `tests`, `e2e` — deterministic and browser coverage.
@@ -301,9 +310,10 @@ Active Edge Functions: `ad-events`, `admin`, `analytics-events`, `geo-services`,
 3. Enable leaked-password protection if/when the Supabase plan supports it.
 4. Physically test new-account creation, logout/login, profile persistence, Saved, queue targets, Challenges, My Cars and contribution history on multiple real phones.
 5. Continue representative GTA postal/FSA/street search, manual-location restore and `Use my location` validation.
-6. Test the complete `Update queue` + `I'm in line` loop with multiple independent real sessions at an actual wash.
-7. Keep Google hidden until there is an explicit decision to make it public.
-8. Run production scale smoke before a larger public launch and after Supabase plan/compute changes.
+6. Test the complete **Find wash → inspect wait/cars ahead → Update queue → optional `I'm in line` → verify updated queue/timing** loop with multiple independent real sessions at an actual wash.
+7. Use PR #47's synthetic-user reports as an automated regression signal, while keeping real-phone / real-location testing as the source for physical UX validation.
+8. Keep Google hidden until there is an explicit decision to make it public.
+9. Run production scale smoke before a larger public launch and after Supabase plan/compute changes.
 
 ---
 
@@ -319,6 +329,7 @@ Active Edge Functions: `ad-events`, `admin`, `analytics-events`, `geo-services`,
 | #30–#31 | Merged | Scale architecture, smoke testing and runbook |
 | #32 | Merged | Password/social account foundation |
 | #33 | Merged | 24-hour anonymous merge claim |
+| #34 | Draft / open | Temporary friend-release browser audit; do not merge without review. Newer production audits and PR #47 likely supersede its purpose |
 | #35 | Merged | Friends-beta release hardening |
 | #36 | Merged | 8-character/password-manager-friendly signup |
 | #37 | Merged | Production audit aligned with simplified signup |
@@ -330,6 +341,8 @@ Active Edge Functions: `ad-events`, `admin`, `analytics-events`, `geo-services`,
 | #43 | Merged | Compact reference-led card using the WashRadar light theme |
 | #44 | Merged | Best badge/favourite placement and `Queue + wash` wording refinement |
 | #45 | Merged | Manual-location + sort persistence, quick-sort buttons and stable `Update queue` CTA |
+| #46 | Merged | Documentation-only follow-up recording PR #45 as the production feature baseline |
+| #47 | Merged | Read-only synthetic normal-user testing agent; runs real-Chromium journeys and production regression checks |
 
 ## Superseded paths to avoid restarting
 
@@ -340,5 +353,6 @@ Active Edge Functions: `ad-events`, `admin`, `analytics-events`, `geo-services`,
 - Dense card layouts that give distance, queue, wash, trust and metadata equal weight — superseded by the wait-first compact hierarchy.
 - Sort dropdown on Explore — superseded by PR #45 quick-sort controls.
 - Re-entering a successful manual postal/address search after every refresh — superseded by PR #45 device-local manual location continuity.
+- Treating PR #34 as a current release blocker — newer production audits and PR #47's synthetic-user coverage have moved the testing baseline forward; review/clean it up rather than merging it by default.
 
-Always start from `main`, inspect newest merged PRs, verify the latest Pages workflow, and read the relevant auth/scaling runbook before changing those systems.
+Always start from `main`, inspect newest merged/open PRs, compare them with this README, verify the latest Pages workflow and production/synthetic audits, and read the relevant auth/scaling runbook before changing those systems.
