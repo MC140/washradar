@@ -67,16 +67,22 @@ begin
   where r.wash_id = p_wash_id
     and r.disabled = false;
 
-  select coalesce(jsonb_agg(jsonb_build_object('tag', ranked.tag, 'count', ranked.tag_count) order by ranked.tag_count desc, ranked.tag), '[]'::jsonb)
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object('tag', ranked.tag, 'count', ranked.tag_count)
+      order by ranked.tag_count desc, ranked.tag
+    ),
+    '[]'::jsonb
+  )
   into v_tags
   from (
-    select tag, count(*)::integer as tag_count
+    select tag_item.tag, count(*)::integer as tag_count
     from public.wash_ratings r
-    cross join lateral unnest(r.tags) as tag
+    cross join lateral unnest(r.tags) as tag_item(tag)
     where r.wash_id = p_wash_id
       and r.disabled = false
-    group by tag
-    order by count(*) desc, tag
+    group by tag_item.tag
+    order by count(*) desc, tag_item.tag
     limit 6
   ) ranked;
 
@@ -138,15 +144,15 @@ begin
     raise exception 'Ratings must be between 1 and 5.';
   end if;
 
-  select coalesce(array_agg(distinct t order by t), '{}')
+  select coalesce(array_agg(distinct tag_item.tag order by tag_item.tag), '{}'::text[])
   into v_tags
-  from unnest(coalesce(p_tags, '{}')) as t;
+  from unnest(coalesce(p_tags, '{}'::text[])) as tag_item(tag);
 
   if cardinality(v_tags) > 3
      or exists (
        select 1
-       from unnest(v_tags) as t
-       where t <> all(array[
+       from unnest(v_tags) as tag_item(tag)
+       where tag_item.tag <> all(array[
          'clean_facility',
          'good_value',
          'strong_equipment',
