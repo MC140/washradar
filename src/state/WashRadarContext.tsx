@@ -53,9 +53,18 @@ type State = {
   signOut: () => Promise<void>;
 };
 
+type StoredManualLocation = {label: string; point: Point};
+
 const Context = createContext<State | null>(null);
 const initialMetrics = {reportsSubmitted: 0, completedWaits: 0, reputation: 50, streakDays: 0};
 const neutralOrigin: Point = {lat: 43.6532, lng: -79.3832};
+const manualLocationStorageKey = 'wr-manual-location-v1';
+const sortStorageKey = 'wr-sort-v1';
+const supportedSortModes: SortMode[] = ['Recommended', 'Fastest Total Time', 'Shortest Queue', 'Nearest', 'Lowest Price'];
+
+function hasStorage() {
+  return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+}
 
 function storedFilters(): WashFilters {
   try {
@@ -66,11 +75,44 @@ function storedFilters(): WashFilters {
   }
 }
 
+function storedManualLocation(): StoredManualLocation | null {
+  try {
+    if (!hasStorage()) return null;
+    const stored = localStorage.getItem(manualLocationStorageKey);
+    if (!stored) return null;
+    const parsed = JSON.parse(stored) as Partial<StoredManualLocation>;
+    const label = typeof parsed.label === 'string' ? parsed.label.trim() : '';
+    const lat = parsed.point?.lat;
+    const lng = parsed.point?.lng;
+    if (
+      !label || typeof lat !== 'number' || typeof lng !== 'number' ||
+      !Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180
+    ) {
+      localStorage.removeItem(manualLocationStorageKey);
+      return null;
+    }
+    return {label: label.slice(0, 160), point: {lat, lng}};
+  } catch {
+    return null;
+  }
+}
+
+function storedSort(): SortMode {
+  try {
+    if (!hasStorage()) return 'Recommended';
+    const stored = localStorage.getItem(sortStorageKey) as SortMode | null;
+    return stored && supportedSortModes.includes(stored) ? stored : 'Recommended';
+  } catch {
+    return 'Recommended';
+  }
+}
+
 export function WashRadarProvider({children}: {children: ReactNode}) {
-  const [origin, setOrigin] = useState<Point>(neutralOrigin);
+  const [restoredManualLocation] = useState(storedManualLocation);
+  const [origin, setOrigin] = useState<Point>(() => restoredManualLocation?.point ?? neutralOrigin);
   const [currentPosition, setCurrentPosition] = useState<Point>();
-  const [locationLabel, setLocationLabel] = useState('Set location');
-  const [locationReady, setLocationReady] = useState(false);
+  const [locationLabel, setLocationLabel] = useState(() => restoredManualLocation?.label ?? 'Set location');
+  const [locationReady, setLocationReady] = useState(() => Boolean(restoredManualLocation));
   const [washes, setWashes] = useState<RankedWash[]>([]);
   const [signals, setSignals] = useState<QueueSignal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -81,7 +123,7 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
   const [session, setSession] = useState<QueueSession | null>(null);
   const [metrics, setMetrics] = useState<ContributionMetrics>(initialMetrics);
   const [filters, setFiltersState] = useState<WashFilters>(storedFilters);
-  const [sort, setSort] = useState<SortMode>('Recommended');
+  const [sort, setSortState] = useState<SortMode>(storedSort);
   const [auth, setAuth] = useState({signedIn: false, email: null as string | null});
   const refreshVersion = useRef(0);
   const activeWashIdsKey = useMemo(() => washes.map((wash) => wash.id).sort().join(','), [washes]);
@@ -197,6 +239,10 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
   }, [filters]);
 
   useEffect(() => {
+    if (hasStorage()) localStorage.setItem(sortStorageKey, sort);
+  }, [sort]);
+
+  useEffect(() => {
     const online = () => { setOffline(false); void refresh(); };
     const offlineHandler = () => setOffline(true);
     window.addEventListener('online', online);
@@ -249,6 +295,7 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
   const locate = useCallback(async () => {
     try {
       const result = await requestLocation();
+      if (hasStorage()) localStorage.removeItem(manualLocationStorageKey);
       setCurrentPosition(result.point);
       setOrigin(result.point);
       setLocationLabel('Current location');
@@ -258,23 +305,30 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
       toast.success('Nearby washes updated.');
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Location is unavailable.';
-      setLocationLabel('Set location');
+      if (!locationReady) setLocationLabel('Set location');
       toast.info(message);
     }
-  }, []);
+  }, [locationReady]);
 
   const search = useCallback(async (query: string) => {
     const point = await repository.searchLocation(query);
     analytics.track('search', {hasResult: Boolean(point)});
     if (!point) return false;
+    const label = query.trim();
+    if (hasStorage()) {
+      const storedLocation: StoredManualLocation = {label, point};
+      localStorage.setItem(manualLocationStorageKey, JSON.stringify(storedLocation));
+    }
+    setCurrentPosition(undefined);
     setOrigin(point);
-    setLocationLabel(query.trim());
+    setLocationLabel(label);
     setLocationReady(true);
     setLoading(true);
     return true;
   }, []);
 
   const setFilters = useCallback((next: WashFilters) => setFiltersState(next), []);
+  const setSort = useCallback((next: SortMode) => setSortState(next), []);
 
   const toggleFavourite = useCallback(async (washId: string) => {
     const save = !favourites.includes(washId);
@@ -377,7 +431,7 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
     removeAlert,
     signIn,
     signOut,
-  }), [origin, currentPosition, locationLabel, locationReady, washes, signals, loading, error, offline, favourites, alerts, session, metrics, filters, sort, auth, refresh, locate, search, setFilters, toggleFavourite, submitReport, startSession, finishSession, createAlert, removeAlert, signIn, signOut]);
+  }), [origin, currentPosition, locationLabel, locationReady, washes, signals, loading, error, offline, favourites, alerts, session, metrics, filters, sort, auth, refresh, locate, search, setFilters, setSort, toggleFavourite, submitReport, startSession, finishSession, createAlert, removeAlert, signIn, signOut]);
 
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
