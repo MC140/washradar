@@ -6,6 +6,7 @@ import {AlertModal} from '../components/AlertModal';
 import {Modal} from '../components/Modal';
 import {NearbyOffer} from '../components/NearbyOffer';
 import {ReportModal} from '../components/ReportModal';
+import {WashRatingPanel} from '../components/WashRatingPanel';
 import {QUEUE_CONFIG, WASH_TYPE_CONFIG} from '../domain/config';
 import {distanceKm, hasQueueEvidence} from '../domain/engine';
 import type {AdCreative, BusinessHours, QueueBucket, QueueSignal, RankedWash} from '../domain/models';
@@ -155,6 +156,8 @@ export function WashDetailsPage() {
               <button className="text-button" onClick={() => setPriceOpen(true)}>Report an incorrect price</button>
             </> : <div className="no-reports"><strong>Pricing not verified yet</strong><p>WashRadar will show prices only after a reliable source is available. We won’t invent a starting price.</p></div>}
           </section>
+
+          <WashRatingPanel washId={wash.id} />
 
           <section className="panel">
             <p className="eyebrow">LOCATION DETAILS</p><h2>Before you go</h2>

@@ -9,6 +9,7 @@ import './ui-polish.css';
 import './release-polish.css';
 import './native-hardening.css';
 import './map-polish.css';
+import './ratings-polish.css';
 
 installCostOptimizations();
 installAddressAutocomplete();

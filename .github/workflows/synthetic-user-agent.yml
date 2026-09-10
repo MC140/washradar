@@ -95,6 +95,9 @@ jobs:
       - name: Verify map markers and Search this area
         run: npx tsx scripts/map-user-agent.ts
 
+      - name: Verify structured WashRadar ratings
+        run: npx tsx scripts/ratings-user-agent.ts
+
       - name: Add report to workflow summary
         if: always()
         shell: bash
