@@ -141,14 +141,14 @@ async function uxScan(page: Page, journey: Journey, mobile: boolean) {
       const text = (html.innerText || '').trim();
       const aria = element.getAttribute('aria-label')?.trim();
       const title = element.getAttribute('title')?.trim();
-      const value = element instanceof HTMLInputElement ? element.value.trim() : '';
+      const value = element.tagName === 'INPUT' ? ((element as HTMLInputElement).value || '').trim() : '';
       return !text && !aria && !title && !value;
     });
 
     const smallTargets = mobile
       ? interactive.filter(element => {
           const rect = (element as HTMLElement).getBoundingClientRect();
-          return rect.width < 36 || rect.height < 36;
+          return rect.width < 44 || rect.height < 44;
         })
       : [];
 
@@ -170,7 +170,7 @@ async function uxScan(page: Page, journey: Journey, mobile: boolean) {
     addFinding(journey, 'warning', 'Accessibility scan', `${scan.unlabeledInteractiveCount} visible interactive control(s) appear to have no accessible label`, page.url());
   }
   if (mobile && scan.smallTouchTargetCount > 5) {
-    addFinding(journey, 'info', 'Mobile UX scan', `${scan.smallTouchTargetCount} visible controls are smaller than 36px in at least one dimension`, page.url());
+    addFinding(journey, 'info', 'Mobile UX scan', `${scan.smallTouchTargetCount} visible controls are smaller than the 44px native target guideline in at least one dimension`, page.url());
   }
   if (scan.mainTextLength < 40) {
     addFinding(journey, 'warning', 'Content scan', 'The main page has unusually little visible text', page.url());
@@ -200,9 +200,14 @@ async function runJourney(options: {
 
   try {
     await options.flow(page, journey);
-    await uxScan(page, journey, options.mobile);
   } catch {
     // Failed steps are already recorded; continue to evidence capture.
+  }
+
+  try {
+    await uxScan(page, journey, options.mobile);
+  } catch (error) {
+    addFinding(journey, 'critical', 'UX scanner', `UX scan failed: ${messageOf(error).split('\n')[0].slice(0, 500)}`, page.url());
   } finally {
     journey.finalUrl = page.url();
     const safeName = options.persona.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -283,7 +288,7 @@ async function mobileNearbyJourney(browser: Awaited<ReturnType<typeof chromium.l
         await page.getByText('CURRENT WAIT').waitFor({state: 'visible', timeout: 12_000});
         await requireVisible(page, 'button', 'Directions');
         await requireVisible(page, 'button', 'Update queue');
-        await requireVisible(page, 'button', /Join queue/i);
+        await requireVisible(page, 'button', /Join queue|Start wait timer/i);
         await requireVisible(page, 'button', /Alert me/i);
         const detailText = (await page.locator('#main-content').innerText()).replace(/\s+/g, ' ');
         journey.metrics.detailCommunicatesMinutes = /\bmin\b/i.test(detailText);
@@ -432,7 +437,7 @@ function renderReport() {
     `- Warnings: ${totals.warningsFound}`,
     `- Informational findings: ${totals.informationalFindings}`,
     '',
-    'The agent is intentionally read-only against production. It does not create accounts, join queues, update queue counts, save queue targets, or submit other production-changing data.',
+    'The agent is intentionally read-only against production. It does not create accounts, start wait timers, update queue counts, save queue targets, or submit other production-changing data.',
     '',
   ];
 
