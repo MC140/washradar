@@ -1,22 +1,51 @@
 /* Pre-native hardening shared by PWA and future Capacitor shells. */
 
 /* Large GTA searches can return 100+ cards. Let the browser skip layout/paint work for
-   off-screen cards while preserving the full ranked list and accessibility tree. */
+   off-screen cards while preserving the full ranked result set. */
 .cards-grid .wash-card {
   content-visibility: auto;
   contain-intrinsic-size: auto 270px;
 }
 
-/* Store-quality touch targets. Existing visual sizes can remain compact while the
-   actionable hit area stays comfortably tappable. */
+/* Store-quality touch targets. Keep the visual treatment compact, but make every common
+   mobile navigation/action surface comfortably tappable before it reaches a WebView. */
 @media (max-width: 760px) {
   .detail-actions button,
   .queue-start-options button,
   .quick-sort button,
   .view-toggle button,
   .card-actions a,
-  .card-actions button {
+  .card-actions button,
+  .back-link,
+  .save-large,
+  .detail-quick-directions,
+  .text-button,
+  .site-header .location-button,
+  .site-header .profile-link,
+  .bottom-nav a,
+  .bottom-nav button,
+  .site-footer a,
+  .filter-chips button,
+  .open-toggle {
     min-height: 44px;
+  }
+
+  .back-link,
+  .detail-quick-directions,
+  .text-button,
+  .site-footer a,
+  .open-toggle {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .site-header .profile-link {
+    min-width: 44px;
+    justify-content: center;
+  }
+
+  .site-footer nav {
+    align-items: center;
   }
 }
 
