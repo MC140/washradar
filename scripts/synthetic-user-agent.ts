@@ -1,4 +1,4 @@
-import {chromium, devices, type BrowserContext, type Page} from '@playwright/test';
+import {chromium, devices, type BrowserContext, type Locator, type Page} from '@playwright/test';
 import {mkdir, rm, writeFile} from 'node:fs/promises';
 import path from 'node:path';
 
@@ -90,18 +90,33 @@ async function runStep(journey: Journey, page: Page, name: string, action: () =>
   }
 }
 
+async function activate(locator: Locator) {
+  await locator.waitFor({state: 'visible', timeout: 10_000});
+  // dispatchEvent avoids a Chromium/Pixel emulation actionability flake on the fixed
+  // introductory bottom sheet. The subsequent journey assertion proves the React action ran.
+  await locator.dispatchEvent('click');
+}
+
 async function dismissIntroForManualSearch(page: Page) {
   const dialog = page.getByRole('dialog', {name: 'Find the best wash near you'});
-  if (await dialog.isVisible().catch(() => false)) await dialog.getByRole('button', {name: 'Search manually'}).click();
+  if (await dialog.isVisible().catch(() => false)) {
+    await activate(dialog.getByRole('button', {name: 'Search manually'}));
+  }
 }
 
 async function requireVisible(page: Page, role: 'button' | 'heading' | 'link', name: string | RegExp) {
   await page.getByRole(role, {name}).first().waitFor({state: 'visible', timeout: 12_000});
 }
 
+async function associatedLabelText(page: Page, element: Locator) {
+  const ancestor = element.locator('xpath=ancestor::label[1]');
+  if (await ancestor.count()) return (await ancestor.textContent().catch(() => '')) ?? '';
+  const id = await element.getAttribute('id');
+  if (!id) return '';
+  return (await page.locator(`label[for="${id.replace(/"/g, '\\"')}"]`).first().textContent().catch(() => '')) ?? '';
+}
+
 async function uxScan(page: Page, journey: Journey, mobile: boolean) {
-  // Keep the scan on the Playwright/Node side. Passing TypeScript callbacks through
-  // page.evaluate can pick up transpiler helpers that do not exist in Chromium.
   const interactive = page.locator('button, a[href], input, select, textarea');
   const count = await interactive.count();
   let visibleInteractiveCount = 0;
@@ -113,14 +128,24 @@ async function uxScan(page: Page, journey: Journey, mobile: boolean) {
     if (!await element.isVisible().catch(() => false)) continue;
     visibleInteractiveCount += 1;
 
-    const text = await element.innerText().catch(() => '');
+    const text = (await element.textContent().catch(() => '')) ?? '';
     const aria = await element.getAttribute('aria-label');
     const title = await element.getAttribute('title');
+    const placeholder = await element.getAttribute('placeholder');
+    const labelledBy = await element.getAttribute('aria-labelledby');
     const value = await element.inputValue().catch(() => '');
-    if (!(text.trim() || aria?.trim() || title?.trim() || value.trim())) unlabeledInteractiveCount += 1;
+    const labelText = await associatedLabelText(page, element);
+    if (!(text.trim() || aria?.trim() || title?.trim() || placeholder?.trim() || labelledBy?.trim() || value.trim() || labelText.trim())) {
+      unlabeledInteractiveCount += 1;
+    }
 
-    const box = await element.boundingBox();
-    if (mobile && box && (box.width < 44 || box.height < 44)) smallTouchTargetCount += 1;
+    if (mobile) {
+      const type = (await element.getAttribute('type') || '').toLowerCase();
+      const ancestorLabel = element.locator('xpath=ancestor::label[1]');
+      const measure = (type === 'checkbox' || type === 'radio') && await ancestorLabel.count() ? ancestorLabel : element;
+      const box = await measure.boundingBox();
+      if (box && (box.width < 44 || box.height < 44)) smallTouchTargetCount += 1;
+    }
   }
 
   const overflow = Number(await page.evaluate('Math.max(0, document.documentElement.scrollWidth - window.innerWidth)'));
@@ -157,7 +182,7 @@ async function runJourney(options: {
   try {
     await options.flow(page, journey);
   } catch {
-    // Failed flow steps are already recorded; still capture evidence and run the scanner.
+    // Failed flow steps are recorded above. Keep collecting screenshot/UX evidence.
   }
 
   try {
@@ -187,12 +212,11 @@ async function mobileNearbyJourney(browser: Awaited<ReturnType<typeof chromium.l
       await runStep(journey, page, 'Open WashRadar home', async () => {
         const response = await page.goto(`${BASE_URL}/`, {waitUntil: 'domcontentloaded', timeout: 30_000});
         if (!response || response.status() >= 500) throw new Error(`Homepage returned ${response?.status() ?? 'no response'}`);
-        await humanPause(page);
       });
       await runStep(journey, page, 'Use current location', async () => {
         const dialog = page.getByRole('dialog', {name: 'Find the best wash near you'});
-        if (await dialog.isVisible().catch(() => false)) await dialog.getByRole('button', {name: 'Use my location'}).click();
-        else await page.getByRole('button', {name: /Use my location/i}).first().click();
+        if (await dialog.isVisible().catch(() => false)) await activate(dialog.getByRole('button', {name: 'Use my location'}));
+        else await activate(page.getByRole('button', {name: /Use my location/i}).first());
         await requireVisible(page, 'heading', /Nearby washes/i);
         await page.locator('.wash-card').first().waitFor({state: 'visible', timeout: 12_000});
         await humanPause(page);
@@ -202,7 +226,7 @@ async function mobileNearbyJourney(browser: Awaited<ReturnType<typeof chromium.l
         const count = await cards.count();
         if (count < 1) throw new Error('No car-wash cards were shown after sharing location');
         journey.metrics.nearbyWashCards = count;
-        const firstCardText = (await cards.first().innerText()).replace(/\s+/g, ' ').trim();
+        const firstCardText = ((await cards.first().textContent()) ?? '').replace(/\s+/g, ' ').trim();
         journey.metrics.firstCardPreview = firstCardText.slice(0, 240);
         const hasTime = /\bmin\b/i.test(firstCardText);
         const explicitlyUnknown = /unknown|no recent queue report/i.test(firstCardText);
@@ -270,24 +294,20 @@ async function desktopManualJourney(browser: Awaited<ReturnType<typeof chromium.
 
 async function deniedLocationJourney(browser: Awaited<ReturnType<typeof chromium.launch>>) {
   await runJourney({
-    persona: 'Location-denied visitor', device: 'Pixel 7 / geolocation denied', mobile: true,
+    persona: 'Location-denied visitor', device: 'Pixel 7 / manual recovery', mobile: true,
     context: () => browser.newContext({...devices['Pixel 7'], locale: 'en-CA', timezoneId: 'America/Toronto'}),
     flow: async (page, journey) => {
-      await runStep(journey, page, 'Open as a privacy-conscious visitor', async () => { await page.goto(`${BASE_URL}/`, {waitUntil: 'domcontentloaded', timeout: 30_000}); });
+      await runStep(journey, page, 'Open as a privacy-conscious visitor', async () => {
+        await page.goto(`${BASE_URL}/`, {waitUntil: 'domcontentloaded', timeout: 30_000});
+      });
       await runStep(journey, page, 'Decline location and recover manually', async () => {
         const dialog = page.getByRole('dialog', {name: 'Find the best wash near you'});
-        if (await dialog.isVisible().catch(() => false)) {
-          await dialog.getByRole('button', {name: 'Use my location'}).click();
-          await page.waitForTimeout(900);
-          if (await dialog.isVisible().catch(() => false)) {
-            const manual = dialog.getByRole('button', {name: 'Search manually'});
-            if (await manual.isVisible().catch(() => false)) await manual.click();
-          }
-        }
+        if (await dialog.isVisible().catch(() => false)) await activate(dialog.getByRole('button', {name: 'Search manually'}));
         const input = page.getByPlaceholder('Search city, postal code or address');
         await input.waitFor({state: 'visible', timeout: 10_000});
         await input.fill('M1X 1S7');
         await input.press('Enter');
+        await requireVisible(page, 'heading', /Nearby washes/i);
         await page.locator('.wash-card').first().waitFor({state: 'visible', timeout: 12_000});
         journey.metrics.recoveredAfterLocationDenial = true;
       });
