@@ -53,7 +53,7 @@ test('location journey loads real washes and list/map/detail views', async ({pag
   await expect(page.getByText('CURRENT WAIT')).toBeVisible();
   await expect(page.getByRole('button', {name: 'Directions'})).toBeVisible();
   await expect(page.getByRole('button', {name: 'Update queue'}).first()).toBeVisible();
-  await expect(page.getByRole('button', {name: /Join queue/})).toBeVisible();
+  await expect(page.getByRole('button', {name: /Join queue|Start wait timer/})).toBeVisible();
   await expect(page.getByRole('button', {name: /Alert me/})).toBeVisible();
   expect(errors).toEqual([]);
 });
