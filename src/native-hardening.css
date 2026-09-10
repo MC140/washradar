@@ -30,6 +30,57 @@
     min-height: 44px;
   }
 
+  /* Preserve the compact 30px visual circles while giving the save/directions controls
+     a full 44px hit box. */
+  .wash-card-v2 .wash-card-v2-save,
+  .wash-card-v2 .wash-card-v2-directions {
+    position: relative;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    flex: 0 0 44px;
+    border: 0;
+    background: transparent;
+  }
+
+  .wash-card-v2 .wash-card-v2-save::before,
+  .wash-card-v2 .wash-card-v2-directions::before {
+    content: '';
+    position: absolute;
+    inset: 7px;
+    border: 1px solid #dce5e1;
+    border-radius: 50%;
+    background: #fff;
+  }
+
+  .wash-card-v2 .wash-card-v2-save svg,
+  .wash-card-v2 .wash-card-v2-directions svg {
+    position: relative;
+    z-index: 1;
+  }
+
+  .wash-card-v2 .wash-card-v2-save.is-saved::before {
+    border-color: #cfe3da;
+    background: var(--green-pale);
+  }
+
+  .wash-card-v2 .wash-card-v2-save:hover::before,
+  .wash-card-v2 .wash-card-v2-directions:hover::before {
+    border-color: #b9d3c8;
+    background: #f8fbf9;
+  }
+
+  .wash-card-v2 .wash-card-v2-name-row > a {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+  }
+
+  .wash-card-v2 .wash-card-v2-actions > * {
+    min-height: 44px;
+  }
+
   .back-link,
   .detail-quick-directions,
   .text-button,
@@ -37,6 +88,11 @@
   .open-toggle {
     display: inline-flex;
     align-items: center;
+  }
+
+  .site-header .brand,
+  .site-header .profile-link {
+    min-height: 44px;
   }
 
   .site-header .profile-link {
