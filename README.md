@@ -30,7 +30,7 @@ Do not restart old/superseded work merely because it appears in historical notes
 
 # Current production baseline — 2026-09-10
 
-Production runs `main` through **PR #49**.
+Production runs `main` through **PR #50**.
 
 - **PR #45** is the last large result-card/search-persistence feature release before native hardening.
 - **PR #46** is a documentation-only follow-up.
@@ -38,8 +38,9 @@ Production runs `main` through **PR #49**.
 - **PR #48** is the **pre-native production-hardening baseline**. It added self-service account deletion, true HTTP-200 app-route entry points, guest-network cleanup, optional verified wait-timer wording/behavior, mobile/native hardening, native-ready address-index configuration and stronger candidate-build regression testing.
 - Direct commit `d8ba61a…` aligned the older production audit with the new **Start wait timer** wording.
 - **PR #49** cleaned the map UX, added overlap clustering and added explicit **Search this area** / persisted pinned-map-origin browsing. It also added a dedicated regression agent for the map behavior and removed the Pixel-emulation intro-sheet click flake from the older production audit.
+- **PR #50** added first-party **WashRadar Ratings** as a structured, no-free-text quality layer on wash Details. It added secure aggregate/read and validated write RPCs, server-derived Verified visit evidence, guest-to-account rating continuity and dedicated read-only ratings regression coverage.
 
-PR #49 merged at `4936e3eb…`. Its exact candidate head passed quality and synthetic checks before merge. After merge, the `main` quality run, GitHub Pages deployment, post-deploy synthetic agent and post-deploy production Playwright audit all completed successfully. The production synthetic agent explicitly verified the new map-marker and **Search this area** journey.
+PR #50 merged at `578a1ba6…`. Its exact candidate head passed quality and synthetic checks before merge. After merge, the `main` quality run, GitHub Pages deployment, post-deploy synthetic agent and post-deploy production Playwright audit all completed successfully. The production synthetic agent explicitly verified the existing map journey and the new structured WashRadar Ratings panel/RPC/modal flow without submitting production data.
 
 This is the production baseline to use before beginning the Capacitor iOS/Android foundation.
 
@@ -66,7 +67,7 @@ The current friends-beta auth surface is intentionally simple:
 
 ### Anonymous → permanent account continuity
 
-When a guest contributor signs into an existing permanent account, WashRadar can transfer queue reports, wash-type reports, queue-session history and visible contribution counters.
+When a guest contributor signs into an existing permanent account, WashRadar can transfer queue reports, wash-type reports, queue-session history, structured wash ratings and visible contribution counters.
 
 It intentionally does **not** transfer anonymous Radar Points, anonymous reputation/trust score, or an active wait timer. Merge claims are device-held and valid for **24 hours**.
 
@@ -133,6 +134,21 @@ The map is a discovery layer, not a place to expose uncertainty as error-like pu
 - The map reset control returns the viewport to the active search origin.
 
 The production map regression agent checks that `?`/`×` wash markers do not return, that marker selection works, that **Search this area** changes the active origin and that the pinned area survives reload.
+
+## Structured WashRadar Ratings
+
+Wash Details includes a separate **WashRadar Ratings** section as a secondary quality signal after timing and pricing.
+
+- Overall score is 1–5 stars.
+- Wash quality, value and equipment are optional sub-ratings.
+- A contributor may choose up to three predefined highlights such as Clean facility, Good value or Strong equipment.
+- There is **no free-text review field** in the current release.
+- One contributor can hold one rating per wash; submitting again edits that rating instead of stacking duplicates.
+- `Verified visit` is derived server-side only from existing nearby queue / verified wait-timer evidence and cannot be self-selected.
+- Public reads expose aggregates, not raw reviewer identities.
+- The previous Google/provider catalogue star is hidden on Details for now so it cannot be confused with the first-party WashRadar score; only reintroduce it with explicit provider attribution.
+
+Do not add unrestricted written reviews until moderation/reporting/blocking and UGC policy requirements are deliberately implemented.
 
 ---
 
@@ -209,6 +225,7 @@ GitHub Pages (React + Vite PWA)
         +-- Supabase Data API / RLS
         |     +-- canonical washes / hours / types
         |     +-- queue reports / estimates
+        |     +-- structured wash ratings
         |     +-- profiles / vehicles
         |     +-- challenges / progress / points
         |     +-- favourites / queue targets
@@ -221,6 +238,7 @@ GitHub Pages (React + Vite PWA)
         |     +-- nearby spatial lookup
         |     +-- queue signal feed
         |     +-- direct wash detail
+        |     +-- structured rating summary/upsert
         |     +-- contribution rewards/challenges
         |     +-- account/anonymous-history helpers
         |
@@ -325,10 +343,11 @@ SMTP/password-recovery delivery can remain deferred until wider release and is *
 # Near-term priorities
 
 1. Test the complete **Find wash → inspect wait/cars ahead → Update queue → optional Start wait timer → verify updated queue/timing** loop with multiple independent real sessions at an actual wash.
-2. Begin the Capacitor iOS/Android foundation from the verified PR #49 production baseline.
+2. Begin the Capacitor iOS/Android foundation from the verified PR #50 production baseline.
 3. Preserve the current map interaction in native: tap markers for detail and explicitly **Search this area** after panning.
-4. Keep Google Routes disabled for normal browsing and keep ODA address data static/outside Supabase.
-5. Configure SMTP, leaked-password protection, public social login, native push and crash reporting when their release phase requires them rather than prematurely coupling them to the native foundation.
+4. Keep structured WashRadar Ratings secondary to timing; do not add unrestricted written reviews without a deliberate moderation/UGC phase.
+5. Keep Google Routes disabled for normal browsing and keep ODA address data static/outside Supabase.
+6. Configure SMTP, leaked-password protection, public social login, native push and crash reporting when their release phase requires them rather than prematurely coupling them to the native foundation.
 
 ---
 
@@ -350,6 +369,7 @@ SMTP/password-recovery delivery can remain deferred until wider release and is *
 | #47 | Merged | Read-only synthetic normal-user testing agent |
 | #48 | Merged | Pre-native hardening: account deletion, real deep-link 200s, guest cleanup, optional Start wait timer, mobile/native preparation, stronger synthetic testing |
 | #49 | Merged | Clean map markers, clustering, explicit Search this area and persisted pinned-map-origin browsing; dedicated map regression coverage |
+| #50 | Merged | Structured first-party WashRadar Ratings, Verified visit evidence, secure aggregate/write RPCs and ratings regression coverage |
 
 ## Superseded paths to avoid restarting
 
