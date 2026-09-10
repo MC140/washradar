@@ -38,10 +38,23 @@ async function main() {
     const clusterCount = await page.locator('.map-cluster').count();
     if (markerCount + clusterCount < 1) throw new Error('Map rendered no wash markers or clusters');
 
-    if (markerCount > 0) {
-      await page.locator('.map-pin').first().click();
+    const visibleMarkerIndex = await page.locator('.map-pin').evaluateAll((pins) => {
+      const mapElement = document.querySelector('.wash-map');
+      if (!mapElement) return -1;
+      const mapRect = mapElement.getBoundingClientRect();
+      return pins.findIndex((pin) => {
+        const rect = pin.getBoundingClientRect();
+        const x = rect.left + rect.width / 2;
+        const y = rect.top + rect.height / 2;
+        return x >= mapRect.left && x <= mapRect.right && y >= mapRect.top && y <= mapRect.bottom;
+      });
+    });
+    if (visibleMarkerIndex >= 0) {
+      // Dispatch the marker's semantic click without asking Playwright to scroll a
+      // positioned map pin, which would change the viewport/map during the check.
+      await page.locator('.map-pin').nth(visibleMarkerIndex).dispatchEvent('click');
       await page.locator('.map-preview').waitFor({state: 'visible', timeout: 5_000});
-      await page.getByRole('button', {name: 'Close map preview'}).click();
+      await page.getByRole('button', {name: 'Close map preview'}).dispatchEvent('click');
     }
 
     const before = await page.evaluate(() => {
@@ -86,6 +99,7 @@ async function main() {
       badMarkerSymbols,
       markerCount,
       clusterCount,
+      visibleMarkerSelected: visibleMarkerIndex >= 0,
       pinnedPoint: pinned.point,
       persistedAfterReload: true,
     }, null, 2));
