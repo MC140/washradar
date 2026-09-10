@@ -32,10 +32,6 @@ jobs:
     timeout-minutes: 20
     env:
       WASHRADAR_URL: ${{ github.event_name == 'pull_request' && 'http://localhost:4173' || 'https://washradar.ca' }}
-      # The repository keeps only a small city fallback. Production deployment builds the
-      # richer ODA/FSA index. PR candidate tests intentionally consume that same remote
-      # static index, which is also the planned Capacitor/native architecture.
-      VITE_ADDRESS_INDEX_BASE: ${{ github.event_name == 'pull_request' && 'https://washradar.ca/address-index/' || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -47,6 +43,18 @@ jobs:
           cache: npm
 
       - run: npm ci
+
+      - name: Hydrate deployed address index for PR preview
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          # The repository intentionally keeps only a tiny city fallback. Production
+          # deployment builds the richer ODA/FSA index. Pull that deployed static index
+          # into the local candidate so postal-search behavior matches production without
+          # relying on cross-origin browser fetches.
+          curl --fail --silent --show-error --location \
+            https://washradar.ca/address-index/areas.json \
+            --output public/address-index/areas.json
 
       - name: Build candidate app for PR testing
         if: github.event_name == 'pull_request'
