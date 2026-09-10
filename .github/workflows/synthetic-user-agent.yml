@@ -32,6 +32,10 @@ jobs:
     timeout-minutes: 20
     env:
       WASHRADAR_URL: ${{ github.event_name == 'pull_request' && 'http://localhost:4173' || 'https://washradar.ca' }}
+      # The repository keeps only a small city fallback. Production deployment builds the
+      # richer ODA/FSA index. PR candidate tests intentionally consume that same remote
+      # static index, which is also the planned Capacitor/native architecture.
+      VITE_ADDRESS_INDEX_BASE: ${{ github.event_name == 'pull_request' && 'https://washradar.ca/address-index/' || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
