@@ -1,0 +1,123 @@
+/* Release-level UX refinements loaded after the base/card styles. */
+
+.results-bar-v2 {
+  gap: 16px;
+}
+
+.results-bar-v2 .results-controls {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.quick-sort {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 2px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.quick-sort::-webkit-scrollbar {
+  display: none;
+}
+
+.quick-sort button {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 7px 11px;
+  border: 1px solid #d8e3de;
+  border-radius: 999px;
+  color: #58665f;
+  background: #fff;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1;
+  white-space: nowrap;
+  transition: border-color .16s ease, background .16s ease, color .16s ease, box-shadow .16s ease;
+}
+
+.quick-sort button:hover {
+  border-color: #b8cec4;
+  background: #f9fcfa;
+}
+
+.quick-sort button[aria-pressed="true"] {
+  color: var(--green-dark);
+  border-color: #b5d8ca;
+  background: var(--green-pale);
+  box-shadow: inset 0 0 0 1px rgba(8, 127, 101, .035);
+}
+
+/* Updating the queue is the contribution action, so it keeps a stable brand color.
+   Wait-time green/amber/red remains reserved for the timing signal itself. */
+.wash-card-v2 .queue-update-button {
+  color: #fff;
+  background: var(--green);
+  border-color: var(--green);
+  box-shadow: 0 5px 14px rgba(8, 127, 101, .17);
+}
+
+.wash-card-v2 .queue-update-button:hover {
+  color: #fff;
+  background: var(--green-dark);
+  border-color: var(--green-dark);
+  filter: none;
+  box-shadow: 0 6px 16px rgba(8, 127, 101, .21);
+}
+
+.wash-card-v2 .queue-update-button:focus-visible {
+  outline-color: #5cbda4;
+}
+
+@media (max-width: 820px) {
+  .results-bar-v2 {
+    align-items: flex-start;
+  }
+
+  .results-bar-v2 .results-controls {
+    width: 100%;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .quick-sort {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .results-bar-v2 .view-toggle {
+    align-self: flex-end;
+  }
+}
+
+@media (max-width: 520px) {
+  .results-bar-v2 {
+    display: block;
+  }
+
+  .results-bar-v2 h2 {
+    margin-bottom: 10px;
+  }
+
+  .results-bar-v2 .results-controls {
+    gap: 7px;
+  }
+
+  .quick-sort {
+    margin: 0 -2px;
+    padding: 2px;
+  }
+
+  .quick-sort button {
+    min-height: 32px;
+    padding: 7px 10px;
+    font-size: 10.5px;
+  }
+}

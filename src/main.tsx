@@ -6,6 +6,7 @@ import {installCostOptimizations} from './services/costOptimizations';
 import {installPostalSearch} from './services/postalSearch';
 import './styles.css';
 import './ui-polish.css';
+import './release-polish.css';
 
 installCostOptimizations();
 installAddressAutocomplete();

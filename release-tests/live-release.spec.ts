@@ -75,7 +75,7 @@ test('fresh shared wash link resolves without prior Explore state', async ({page
   await context.close();
 });
 
-test('manual GTA postal search returns production wash results', async ({page}) => {
+test('manual GTA postal search persists across reload and exposes quick sort controls', async ({page}) => {
   await page.goto('/');
   await dismissLocationIntro(page);
   const input = page.getByPlaceholder('Search city, postal code or address');
@@ -83,6 +83,17 @@ test('manual GTA postal search returns production wash results', async ({page}) 
   await input.press('Enter');
   await expect(page.getByRole('heading', {name: /Nearby washes/i})).toBeVisible();
   await expect(page.locator('.wash-card').first()).toBeVisible();
+
+  await expect(page.getByRole('button', {name: 'Recommended'})).toBeVisible();
+  const nearest = page.getByRole('button', {name: 'Nearest'});
+  await nearest.click();
+  await expect(nearest).toHaveAttribute('aria-pressed', 'true');
+
+  await page.reload();
+  await expect(page.getByRole('heading', {name: /Nearby washes/i})).toBeVisible();
+  await expect(page.locator('.wash-card').first()).toBeVisible();
+  await expect(page.getByText('M1X 1S7').first()).toBeVisible();
+  await expect(page.getByRole('button', {name: 'Nearest'})).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('manual GTA street-address search returns production wash results', async ({page}) => {

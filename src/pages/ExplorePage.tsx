@@ -12,7 +12,13 @@ import {ReportModal} from '../components/ReportModal';
 import {repository} from '../services';
 
 const MapView = lazy(() => import('../components/MapView').then((module) => ({default: module.MapView})));
-const baseSortOptions: SortMode[] = ['Recommended', 'Fastest Total Time', 'Shortest Queue', 'Nearest', 'Lowest Price'];
+const baseSortOptions: SortMode[] = ['Recommended', 'Shortest Queue', 'Nearest', 'Lowest Price'];
+const quickSortLabels: Partial<Record<SortMode, string>> = {
+  Recommended: 'Recommended',
+  'Shortest Queue': 'Shortest wait',
+  Nearest: 'Nearest',
+  'Lowest Price': 'Lowest price',
+};
 const chips: {type?: WashType; label: string}[] = [
   {label: 'All washes'},
   {type: 'touchless', label: 'Touchless'},
@@ -47,7 +53,7 @@ export function ExplorePage() {
   const queueDataAvailable = washes.some((wash) => hasQueueEvidence(wash, wash.estimate));
   const sortOptions = baseSortOptions.filter((option) =>
     (option !== 'Lowest Price' || priceDataAvailable) &&
-    (!['Fastest Total Time', 'Shortest Queue'].includes(option) || queueDataAvailable),
+    (option !== 'Shortest Queue' || queueDataAvailable),
   );
 
   useEffect(() => {
@@ -69,15 +75,13 @@ export function ExplorePage() {
     });
     const unknownLast = (known: boolean, value: number) => known ? value : Number.POSITIVE_INFINITY;
     return values.sort((a, b) =>
-      sort === 'Fastest Total Time'
-        ? unknownLast(hasQueueEvidence(a, a.estimate), a.totalMinutes) - unknownLast(hasQueueEvidence(b, b.estimate), b.totalMinutes)
-        : sort === 'Shortest Queue'
-          ? unknownLast(hasQueueEvidence(a, a.estimate), a.estimate.waitMinutes) - unknownLast(hasQueueEvidence(b, b.estimate), b.estimate.waitMinutes)
-          : sort === 'Nearest'
-            ? a.distanceKm - b.distanceKm
-            : sort === 'Lowest Price'
-              ? startingPrice(a) - startingPrice(b)
-              : a.score - b.score,
+      sort === 'Shortest Queue'
+        ? unknownLast(hasQueueEvidence(a, a.estimate), a.estimate.waitMinutes) - unknownLast(hasQueueEvidence(b, b.estimate), b.estimate.waitMinutes)
+        : sort === 'Nearest'
+          ? a.distanceKm - b.distanceKm
+          : sort === 'Lowest Price'
+            ? startingPrice(a) - startingPrice(b)
+            : a.score - b.score,
     );
   }, [filters, sort, washes, typeDataAvailable, priceDataAvailable, hoursDataAvailable]);
 
@@ -164,12 +168,21 @@ export function ExplorePage() {
 
       {ad && <NearbyOffer ad={ad} placement="explore_nearby_offer" />}
 
-      {locationReady && <div className="results-bar">
+      {locationReady && <div className="results-bar results-bar-v2">
         <h2>Nearby washes <span>{filtered.length}</span></h2>
-        <div>
-          <select aria-label="Sort nearby washes" value={sortOptions.includes(sort) ? sort : 'Recommended'} onChange={(event) => setSort(event.target.value as SortMode)}>
-            {sortOptions.map((option) => <option key={option}>{option}</option>)}
-          </select>
+        <div className="results-controls">
+          <div className="quick-sort" role="group" aria-label="Sort nearby washes">
+            {sortOptions.map((option) => (
+              <button
+                key={option}
+                type="button"
+                aria-pressed={sort === option}
+                onClick={() => setSort(option)}
+              >
+                {quickSortLabels[option] ?? option}
+              </button>
+            ))}
+          </div>
           <div className="view-toggle" role="group" aria-label="Choose results view">
             <button className={view === 'list' ? 'active' : ''} onClick={() => setView('list')}><List size={16} /> List</button>
             <button className={view === 'map' ? 'active' : ''} onClick={() => setView('map')}><MapIcon size={16} /> Map</button>
