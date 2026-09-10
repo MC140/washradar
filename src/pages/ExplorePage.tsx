@@ -129,7 +129,7 @@ export function ExplorePage() {
 
       <form className="search-row" onSubmit={(event) => {event.preventDefault(); void submitSearch();}}>
         <label className="search-box"><Search size={20} /><span className="sr-only">Search city, postal code or address</span><input value={query} onChange={(event) => {setQuery(event.target.value); if (searchMessage) setSearchMessage('');}} placeholder="Search city, postal code or address" /></label>
-        <button className="filter-button" type="button" onClick={() => setFilterOpen(true)}><SlidersHorizontal size={19} /><span>Filters</span></button>
+        <button className="filter-button" type="button" aria-label="Filters" onClick={() => setFilterOpen(true)}><SlidersHorizontal size={19} /><span>Filters</span></button>
       </form>
       {searchMessage && <p className="search-message" role="status">{searchMessage}</p>}
 
