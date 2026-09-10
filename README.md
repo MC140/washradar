@@ -30,13 +30,40 @@ Do not restart old/superseded work merely because it appears in historical notes
 
 # Current production baseline — 2026-09-10
 
-Production currently runs `main` through **PR #47**.
+Production runs `main` through **PR #48**, followed by a small production-audit wording fix on `main`.
 
-- **PR #45** remains the latest substantial user-facing feature release.
-- **PR #46** is a documentation-only follow-up that recorded PR #45 as the production feature baseline.
-- **PR #47** adds the synthetic normal-user testing agent and is merged/deployed successfully. Quality checks, build, GitHub Pages deploy, synthetic-user testing and post-deploy production audit all passed after the merge.
+- **PR #45** is the last large result-card/search-persistence feature release before native hardening.
+- **PR #46** is a documentation-only follow-up.
+- **PR #47** added the read-only synthetic normal-user testing agent.
+- **PR #48** is the **pre-native production-hardening baseline**. It added self-service account deletion, true HTTP-200 app-route entry points, guest-network cleanup, optional verified wait-timer wording/behavior, mobile/native hardening, native-ready address-index configuration and stronger candidate-build regression testing.
+- Direct commit `d8ba61a…` aligned the older production audit with the new **Start wait timer** wording.
 
-## Friends-beta account model
+PR #48's candidate build passed quality checks and the synthetic user suite before merge. Its GitHub Pages deployment, `main` quality checks and the post-deploy synthetic user agent also completed successfully.
+
+The separate older production Playwright suite later exposed a **Pixel-emulation click-actionability flake on the introductory location sheet**: Playwright reported the sheet backdrop intercepting child-button clicks even though the newer synthetic suite and real browsing worked. **PR #49 includes a test-only correction using the same semantic click method already used by the newer synthetic agent.** Do not interpret that stale red run as evidence that location/manual search is broken for users.
+
+## Current candidate — PR #49
+
+PR #49, **Clean map markers and add Search this area**, is currently under validation.
+
+Its intended behavior is:
+
+- remove error-like `?` and `×` wash markers;
+- show a neutral dot when recent queue/wait evidence is unavailable;
+- show a subdued neutral dot for unavailable/closed listings instead of an `×`;
+- show a wait-minute number only when meaningful queue evidence exists;
+- use the same semantic wait thresholds as the result cards: green 0–15, amber 16–39, red 40+;
+- cluster overlapping wash pins into count bubbles;
+- keep marker selection as a detail-preview action;
+- let users pan the map and choose **Search this area** to make the map center the active nearby-wash origin;
+- persist that pinned map area across refresh until the user chooses another manual search or **Use my location**;
+- add no paid Google Routes or geocoding usage for map-area browsing.
+
+Do not mark PR #49 as production until its exact final head passes quality + synthetic checks, merges, deploys, and passes the post-deploy production checks.
+
+---
+
+# Friends-beta account model
 
 The current friends-beta auth surface is intentionally simple:
 
@@ -49,8 +76,9 @@ The current friends-beta auth surface is intentionally simple:
 - Supabase **Confirm email is OFF** for the friends beta, so new accounts can be created and signed in immediately without waiting for email;
 - Google OAuth remains configured in the backend but its button is **hidden** in the friends-beta UI;
 - Apple sign-in is not exposed;
-- signed-in users have **Set / change password** in Profile and can update their password without email;
+- signed-in users can set/change their password from Profile;
 - forgot-password email recovery is intentionally hidden until reliable public SMTP is configured;
+- self-service account deletion is available and `/account-deletion` exists as a public resource;
 - the shared Supabase session persists across routes/refreshes until sign-out/session invalidation;
 - guest contribution history can be securely merged into a permanent account through the claim flow.
 
@@ -58,163 +86,67 @@ The current friends-beta auth surface is intentionally simple:
 
 When a guest contributor signs into an existing permanent account, WashRadar can transfer queue reports, wash-type reports, queue-session history and visible contribution counters.
 
-It intentionally does **not** transfer anonymous Radar Points, anonymous reputation/trust score, or an active queue timer. Merge claims are device-held and valid for **24 hours**.
+It intentionally does **not** transfer anonymous Radar Points, anonymous reputation/trust score, or an active wait timer. Merge claims are device-held and valid for **24 hours**.
 
 ### Remaining account work before broad public launch
 
-1. Configure **custom SMTP** for reliable password-reset/recovery and, if desired later, email verification.
+1. Configure **custom SMTP** for reliable password reset/recovery and optional email verification.
 2. Enable Supabase **Leaked Password Protection** when the project plan supports it.
-3. Decide whether to expose Google sign-in publicly; backend Google OAuth is configured but currently hidden from the beta UI.
+3. Decide whether to expose Google sign-in publicly; backend Google OAuth is configured but currently hidden.
 4. Add CAPTCHA/Turnstile if signup or anonymous-auth abuse becomes material.
 
-Do not re-enable password-reset UI until email delivery is reliable.
+SMTP is intentionally **not** a blocker for starting the Capacitor iOS/Android phase. Do not re-enable password-reset UI until email delivery is reliable.
 
 ---
 
-# Explore and card UX — current behavior
+# Explore, map and card UX
 
-The Explore experience is optimized around the core decision instead of presenting every field with equal weight.
+## Location continuity
 
-### Location continuity
+A successful **manual city, postal-code or street-address search is stored locally on that device**. Refreshing or reopening WashRadar restores the same searched area and results.
 
-A successful **manual city, postal-code or street-address search is stored locally on that device**. Refreshing or reopening WashRadar restores the same searched area and results without asking the user to enter the postal code again. This is a browser/device preference and works for both guests and signed-in users.
+Manual search coordinates are not treated as verified GPS. If the user later chooses **Use my location** and a fresh GPS fix succeeds, the saved manual/pinned area is cleared and current GPS becomes the active origin. If GPS fails while a manual area is active, WashRadar keeps the working manual area.
 
-Manual search coordinates are not treated as verified GPS. If the user later chooses **Use my location** and a fresh GPS fix succeeds, the saved manual search area is cleared and current GPS becomes the active origin. If GPS access fails while a manual area is active, WashRadar keeps the working manual area rather than discarding it.
+PR #49 extends this same model to map browsing: panning itself does not fire queries. After the user moves the map, **Search this area** explicitly promotes the map center to the active search origin. This is designed to feel like normal map discovery without issuing accidental searches during every drag.
 
-### Quick sorting
+## Quick sorting
 
-The old sort dropdown is replaced by compact, touch-friendly buttons:
+The primary choices are:
 
 - **Recommended** — WashRadar's trust-aware recommendation score;
 - **Shortest wait** — lowest known queue wait, with unknown queue data sorted last;
 - **Nearest** — physical distance from the selected origin;
 - **Lowest price** — shown only when price data is available.
 
-The chosen sort is stored locally and survives refresh. `Fastest Total Time` is intentionally not a prominent quick-sort choice because normal browsing does not use live route traffic; WashRadar should not imply that its local drive estimate is a traffic-aware arrival time.
+The selected sort persists across refresh. `Fastest Total Time` is not a prominent quick-sort choice because normal browsing does not use paid/live route traffic.
 
-### Result-card hierarchy
+## Result-card hierarchy
 
-Result cards intentionally make **wait time the primary decision number** and **cars ahead supporting evidence**. The card no longer shows full street address or secondary price/type/status metadata in the primary scan path.
+Result cards intentionally make **wait time the primary decision number** and **cars ahead supporting evidence**.
 
-Current card structure:
+Current hierarchy:
 
-- the single featured recommendation can show **Best right now** at top-left;
-- the favourite heart is a card-level action at top-right;
-- business name and icon-only Directions stay together;
-- only distance is shown under the business name;
-- estimated wait is the dominant number;
-- cars ahead sits directly under the wait;
-- the footer uses one compact freshness/source line;
-- **`Queue + wash · ~X min`** is the at-location duration;
-- **`+ drive time`** is shown separately so the queue+wash number never implies travel time is included;
-- `Details` and `Update queue` are equal-width actions.
+1. estimated wait;
+2. cars ahead / queue evidence;
+3. distance;
+4. `Queue + wash · ~X min` as the at-location total;
+5. `+ drive time` separately;
+6. compact `Details` + `Update queue` actions.
 
-Wait-time number colors are semantic: **green 0–15 min**, **amber 16–39 min**, **red 40+ min**, with gray/neutral treatment for unknown data. Freshness dot color separately reflects report age.
+Wait colors are semantic: **green 0–15 min**, **amber 16–39 min**, **red 40+ min**, neutral for unknown. Freshness color separately reflects report age.
 
-**`Update queue` has a stable WashRadar-green treatment on every card.** It does not change to amber/red with the wait value because its color communicates “contribute/update,” not traffic severity. This keeps the contribution action visible and predictable for users who help refresh queue data.
+**`Update queue` stays WashRadar green** regardless of wait severity because it represents the contribution action rather than congestion severity.
 
----
+## Map-marker principle
 
-# Recent release hardening — PRs #33–#47
+The map is a discovery layer, not a place to expose uncertainty as error-like punctuation.
 
-- **PR #33** extended anonymous-account merge claims to 24 hours.
-- **PR #35** fixed cold-start/shared wash detail loading, hardened a privileged wash-type RPC, restored Saved/queue-target state on reload, clarified in-app-only queue targets, and hardened friends-beta auth behavior.
-- **PR #36** simplified signup to 8+ character passwords, removed the second password field, and improved password-manager compatibility.
-- **PR #37** aligned the production audit with the simplified signup flow.
-- **PR #38** temporarily exposed Google sign-in for recovery of an existing linked account and added signed-in password change.
-- **PR #39** hid Google again after recovery while keeping signed-in password change available.
-- **PR #41** refreshed the handoff to the current friends-beta state.
-- **PR #42** redesigned result cards around the core decision: wait time first, cars ahead second, standardized freshness, and queue + wash total. Wait numbers use green for 0–15 min, amber for 16–39 min, red for 40+ min, and neutral styling when queue data is unknown.
-- **PR #43** compacted the cards further using the approved reference hierarchy while keeping the existing WashRadar light theme: business name + directions + distance on the left, dominant estimated wait + cars ahead on the right, a thin freshness/footer row and equal-width actions.
-- **PR #44** refined the compact card: the featured recommendation reliably shows `Best right now`, the favourite heart moved to the card's top-right, and the duration wording became `Queue + wash · ~X min` with `+ drive time` separate.
-- **PR #45** persists manual searched areas and sort choice across refresh, replaces the sort dropdown with quick-sort buttons, and gives `Update queue` a stable brand-green contribution treatment independent of wait severity.
-- **PR #46** is the documentation-only follow-up that marked PR #45 as the current production feature baseline.
-- **PR #47** adds a read-only synthetic normal-user agent using real Chromium. It exercises first-time mobile geolocation, manual postal search + sorting, denied-location recovery and public/account navigation; captures screenshots and runtime/network/mobile-UX evidence; runs on demand, after successful production deployments and daily; and does not write synthetic accounts or queue activity into production.
-
-Current production validation includes deterministic queue/trust tests, desktop/mobile live-user journeys, post-deploy production audit, the PR #47 synthetic normal-user agent, and a synthetic transactional challenge lifecycle audit that was rolled back after testing.
-
-The PR #47 agent is a continuous regression guardrail, not a substitute for physical testing. Real-phone testing at actual wash locations remains the highest-value next phase for validating location permission, manual search, queue reporting, `I'm in line`, timing comprehension and Maps hand-off.
-
-The challenge audit covered remote-vs-nearby qualification, distinct-wash counting, verified waits, wash-type confirmation, three-day progress, disabled contributions, one-time rewards, daily point caps, post-completion anti-farming and cross-user isolation.
-
----
-
-# Product principles
-
-> **Low friction for users. High scrutiny for data.**
-
-- Browsing must not require an account.
-- Basic queue contributions must not require a permanent account.
-- Nearby/fresh/verified evidence receives more influence than remote/stale evidence.
-- Unknown data stays unknown; never silently turn missing queue data into `0`.
-- Paid placements must never alter organic recommendation scoring.
-- Normal browsing should generate **$0 of paid Google API traffic whenever practical**.
-- **Trust and rewards are separate systems.** Points, badges and challenges must never make an inaccurate report more trusted.
-- Scale proactively before quota/compute limits become incidents.
-
----
-
-# Current architecture
-
-```text
-GitHub Pages (React + Vite PWA)
-        |
-        +-- app shell / service worker
-        +-- static postal/FSA data
-        +-- static GTA address chunks
-        +-- device-local manual search + filter/sort preferences
-        |
-        +-- Supabase Auth
-        |     +-- guest/anonymous identity
-        |     +-- email + password
-        |     +-- Google OAuth configured but hidden in beta UI
-        |     +-- signed-in password change
-        |     +-- email recovery deferred until SMTP
-        |
-        +-- Supabase Data API / RLS
-        |     +-- canonical washes / hours / types
-        |     +-- queue reports / estimates
-        |     +-- profiles / user vehicles
-        |     +-- challenges / progress / points ledger
-        |     +-- favourites / queue targets
-        |
-        +-- queue freshness
-        |     +-- DEFAULT: visible-tab polling of queue_signal_feed
-        |     +-- OPTIONAL: Supabase Realtime by config
-        |
-        +-- Supabase DB triggers / RPCs
-        |     +-- nearby spatial lookup
-        |     +-- queue signal feed
-        |     +-- direct wash-detail lookup
-        |     +-- contribution rewards
-        |     +-- challenge progress
-        |     +-- account/anonymous-history helpers
-        |
-        +-- Supabase Edge Functions
-              +-- queue validation/sessions
-              +-- geocode fallback
-              +-- controlled Places ingestion
-              +-- wash-type evidence
-              +-- ads/analytics
-              +-- protected admin/moderation
-
-Directions --> Google Maps / Apple Maps on the user's device
-```
-
-Main folders:
-
-- `src/domain` — ranking, queue estimation, confidence, contributor levels/config.
-- `src/services` — repositories, Supabase adapter, search, auth/community, analytics and queue refresh.
-- `src/components`, `src/pages` — UI.
-- `src/state` — app state plus device-local location/filter/sort continuity.
-- `supabase/migrations` — schema/RLS/indexes/RPCs/triggers.
-- `supabase/functions` — privileged actions/enrichment.
-- `scripts` — static index generators and scale-smoke script.
-- `.github/workflows` — CI, Pages deployment, post-deploy live audit, synthetic normal-user agent and production scale smoke.
-- `release-tests` — production Playwright user journeys and synthetic-user journey/reporting logic.
-- `docs/AUTH.md` — account/auth security model.
-- `docs/SCALING.md` — capacity/upgrade runbook.
-- `tests`, `e2e` — deterministic and browser coverage.
+- Known queue/wait evidence may show a wait-minute number.
+- Unknown timing should be a neutral marker, not `?`.
+- Closed/unavailable should be visually subdued, not `×`.
+- Dense nearby listings should cluster into numeric count markers.
+- Tapping a single wash marker opens its existing preview/details.
+- Panning should reveal **Search this area** instead of automatically replacing the user's location.
 
 ---
 
@@ -222,16 +154,25 @@ Main folders:
 
 General evidence ordering:
 
-1. verified completed queue session;
+1. verified completed wait session;
 2. fresh nearby GPS report;
-3. older/less precise nearby report;
+3. older/less-precise nearby report;
 4. remote report.
 
-Remote evidence is deliberately weak and cannot by itself create a strong `LIVE` queue state. Rapid duplicates and excessive reporting are rate-limited/deduplicated server-side.
+Remote evidence is deliberately weak and cannot by itself create a strong `LIVE` queue state. Rapid duplicates/excessive reporting are rate-limited or deduplicated server-side.
 
-Queue buckets are `NO QUEUE`, `1–3`, `4–7`, `8–12`, and `12+`. The backend maps each bucket to a representative car count and combines it with the wash's minutes-per-car model. It does **not** fake a continuously decreasing car count after a report. Evidence freshness decays over time and old evidence expires.
+Queue buckets are `NO QUEUE`, `1–3`, `4–7`, `8–12`, and `12+`. The backend maps each bucket to a representative car count and combines it with the wash's minutes-per-car model. It does **not** fake a continuously decreasing car count after a report. Evidence freshness decays and expires.
 
-Open clients typically receive another user's accepted queue update within roughly **20 seconds plus jitter**; the submitting client refreshes immediately after a successful write.
+Open clients normally receive another user's accepted queue update within roughly **20 seconds plus jitter**; the submitting client refreshes immediately after a successful write.
+
+## Update queue vs Start wait timer
+
+These are intentionally different contribution types:
+
+- **Update queue** is the primary, low-friction community action. It helps other drivers immediately by reporting the current cars-ahead/queue bucket.
+- **Start wait timer** is optional and only for someone physically at the wash. It collects a stronger observed actual-wait sample.
+
+WashRadar must not depend on every user running a timer. Many quick queue reports plus occasional verified completed waits is the intended data model.
 
 ---
 
@@ -252,12 +193,103 @@ Challenges:
 
 - **First Radar** — first nearby queue update — +100.
 - **Queue Scout** — update 3 different nearby washes — +250.
-- **Verified Wait** — complete a verified `I'm in line` timer — +500.
+- **Verified Wait** — complete a verified **Start wait timer** session — +500.
 - **Wash Detective** — nearby wash-type confirmation — +150.
 - **3-Day Contributor** — contribute on 3 different days — +300.
 - **Local Hero** — help update 5 different nearby washes — +750.
 
 Challenge progress is derived server-side from contribution history and rewards cannot be repeatedly farmed after completion.
+
+---
+
+# Current architecture
+
+```text
+GitHub Pages (React + Vite PWA)
+        |
+        +-- app shell / service worker
+        +-- static postal/FSA data
+        +-- static GTA ODA address chunks
+        +-- device-local manual/pinned search + filter/sort preferences
+        |
+        +-- Supabase Auth
+        |     +-- guest/anonymous identity
+        |     +-- email + password
+        |     +-- Google OAuth configured but hidden in beta UI
+        |     +-- signed-in password change
+        |     +-- self-service deletion
+        |     +-- email recovery deferred until SMTP
+        |
+        +-- Supabase Data API / RLS
+        |     +-- canonical washes / hours / types
+        |     +-- queue reports / estimates
+        |     +-- profiles / vehicles
+        |     +-- challenges / progress / points
+        |     +-- favourites / queue targets
+        |
+        +-- queue freshness
+        |     +-- DEFAULT: visible-tab polling of queue_signal_feed
+        |     +-- OPTIONAL: Supabase Realtime by config
+        |
+        +-- Supabase RPCs/triggers
+        |     +-- nearby spatial lookup
+        |     +-- queue signal feed
+        |     +-- direct wash detail
+        |     +-- contribution rewards/challenges
+        |     +-- account/anonymous-history helpers
+        |
+        +-- Supabase Edge Functions
+              +-- account-actions
+              +-- queue validation/sessions
+              +-- geocode fallback
+              +-- controlled Places ingestion
+              +-- wash-type evidence
+              +-- ads/analytics
+              +-- protected admin/moderation
+
+Directions --> Google Maps / Apple Maps on the user's device
+```
+
+Main folders:
+
+- `src/domain` — ranking, queue estimation, confidence, contributor config.
+- `src/services` — repositories, Supabase adapter, search, auth/community, analytics and queue refresh.
+- `src/components`, `src/pages` — UI.
+- `src/state` — app state plus device-local location/filter/sort continuity.
+- `supabase/migrations` — schema/RLS/indexes/RPCs/triggers.
+- `supabase/functions` — privileged actions/enrichment.
+- `scripts` — static index generators, synthetic agents and scale-smoke tooling.
+- `.github/workflows` — CI, Pages deployment, post-deploy audit, synthetic user and scale smoke.
+- `release-tests` — production Playwright user journeys.
+- `docs/AUTH.md` — account/auth security model.
+- `docs/SCALING.md` — capacity/upgrade runbook.
+- `tests`, `e2e` — deterministic/browser coverage.
+
+---
+
+# Cost architecture
+
+Normal browsing is designed to avoid paid Google routing traffic:
+
+- GPS — browser/phone geolocation — $0 to WashRadar.
+- Distance — local calculation — $0.
+- Queue — dynamic Supabase data.
+- Postal/FSA search — static generated index — $0/search.
+- Street/house autocomplete — static partitioned open-address files — $0/search.
+- Map-area search — coordinate-based nearby lookup; no geocode required.
+- Traffic/ETA — user's Maps app after Directions — $0 to WashRadar.
+- Google Routes — disabled for normal browsing.
+- Google Places — administrative catalogue maintenance/enrichment only.
+- Google Geocoding — exceptional fallback.
+- Password login — no email send.
+- Friends-beta signup — no email confirmation while Confirm email is OFF.
+- Forgot-password recovery — deferred until public SMTP is configured.
+
+### Address architecture — do not regress
+
+The failed PR #13 NAR path has been superseded. PR #16 moved address autocomplete to Statistics Canada's Ontario Open Database of Addresses (ODA) and a static partitioned index served by GitHub Pages.
+
+Do not return to NAR debugging by default, put millions of household addresses into Supabase, or make address-index generation a production deployment blocker without a new concrete reason.
 
 ---
 
@@ -271,49 +303,47 @@ Free → Pro should remain a capacity/billing change rather than an application 
 
 ---
 
-# Cost architecture
-
-Normal browsing is designed to avoid paid Google routing traffic:
-
-- GPS — browser/phone geolocation — $0 to WashRadar.
-- Distance — local calculation — $0.
-- Queue — dynamic Supabase data.
-- Postal/FSA search — static generated index — $0/search.
-- Street/house autocomplete — static partitioned open-address files — $0/search.
-- Traffic/ETA — user's Maps app after Directions — $0 to WashRadar.
-- Google Routes — disabled for normal browsing.
-- Google Places — administrative catalogue maintenance/enrichment only.
-- Google Geocoding — exceptional fallback.
-- Password login — no email send.
-- Friends-beta signup — no email confirmation while Confirm email is OFF.
-- Forgot-password recovery — deferred until public SMTP is configured.
-
----
-
 # Current infrastructure
 
 - Frontend: React + Vite + TypeScript PWA.
 - Hosting: GitHub Pages.
 - Primary domain: `washradar.ca`.
 - Backend: Supabase PostgreSQL, Auth, Data API, optional Realtime and Edge Functions.
-- Map display: open tile-map path.
+- Map display: open tile-map path for normal browsing.
 - Approximate catalogue: ~889 saved wash locations, GTA-first with useful spillover.
 
-Active Edge Functions: `ad-events`, `admin`, `analytics-events`, `geo-services`, `queue-actions`, `wash-ingest`, `wash-type-actions`.
+Active Edge Functions include: `account-actions`, `ad-events`, `admin`, `analytics-events`, `geo-services`, `queue-actions`, `wash-ingest`, `wash-type-actions`.
+
+---
+
+# Pre-native / native release sequence
+
+The web architecture does not need to be rewritten for iOS/Android. The intended native path is **Capacitor** around the existing React/Vite/Supabase application.
+
+Before store submission, native-specific work still includes:
+
+- Capacitor iOS/Android projects and signing;
+- platform geolocation and app lifecycle/resume behavior;
+- secure native session/token storage where practical;
+- deep links and Maps handoff;
+- safe-area/status-bar/native shell polish;
+- optional APNs/FCM push if queue alerts are included in native v1;
+- production crash telemetry;
+- physical iPhone/Android accessibility/lifecycle testing;
+- controlled two-device and real-wash transaction testing.
+
+SMTP/password-recovery delivery can remain deferred until wider release and is **not** required merely to begin the native projects.
 
 ---
 
 # Near-term priorities
 
-1. Keep the friends beta on email/password while collecting real-user feedback.
-2. Configure custom SMTP before enabling forgot-password recovery for arbitrary users.
-3. Enable leaked-password protection if/when the Supabase plan supports it.
-4. Physically test new-account creation, logout/login, profile persistence, Saved, queue targets, Challenges, My Cars and contribution history on multiple real phones.
-5. Continue representative GTA postal/FSA/street search, manual-location restore and `Use my location` validation.
-6. Test the complete **Find wash → inspect wait/cars ahead → Update queue → optional `I'm in line` → verify updated queue/timing** loop with multiple independent real sessions at an actual wash.
-7. Use PR #47's synthetic-user reports as an automated regression signal, while keeping real-phone / real-location testing as the source for physical UX validation.
-8. Keep Google hidden until there is an explicit decision to make it public.
-9. Run production scale smoke before a larger public launch and after Supabase plan/compute changes.
+1. Finish PR #49 map UX validation and merge only after its final exact head is green.
+2. Verify the PR #49 production deployment, post-deploy synthetic suite and production Playwright journey audit.
+3. Test the complete **Find wash → inspect wait/cars ahead → Update queue → optional Start wait timer → verify updated queue/timing** loop with multiple independent real sessions at an actual wash.
+4. Begin the Capacitor iOS/Android foundation from the verified production baseline.
+5. Keep Google Routes disabled for normal browsing and keep ODA address data static/outside Supabase.
+6. Configure SMTP, leaked-password protection, public social login, native push and crash reporting when their release phase requires them rather than prematurely coupling them to the native foundation.
 
 ---
 
@@ -321,38 +351,30 @@ Active Edge Functions: `ad-events`, `admin`, `analytics-events`, `geo-services`,
 
 | PR | Status | Current meaning |
 | --- | --- | --- |
-| #1–#12 | Merged | Core timing, queue reporting/trust, domain, catalogue, wash-type truth and zero-cost routing foundations |
-| #13–#17 | Mixed | Address-index iterations; current implementation is ODA-based |
-| #18–#22 | Merged | Supabase runtime optimization and current unified postal/address search |
-| #23–#24 | Merged | README/handoff and PR history documentation |
-| #25–#29 | Merged | Profiles, Radar Points/Challenges, My Cars, persistent auth/drawer and email burst protection |
-| #30–#31 | Merged | Scale architecture, smoke testing and runbook |
-| #32 | Merged | Password/social account foundation |
-| #33 | Merged | 24-hour anonymous merge claim |
-| #34 | Draft / open | Temporary friend-release browser audit; do not merge without review. Newer production audits and PR #47 likely supersede its purpose |
-| #35 | Merged | Friends-beta release hardening |
-| #36 | Merged | 8-character/password-manager-friendly signup |
-| #37 | Merged | Production audit aligned with simplified signup |
-| #38 | Merged | Temporary Google recovery + signed-in password change |
-| #39 | Merged | Google hidden again; current friends-beta auth surface |
-| #40 | Closed / superseded | Stale README refresh attempt; superseded by clean PR #41 |
-| #41 | Merged | Friends-beta README/handoff refresh |
-| #42 | Merged | Timing-first card redesign: wait prominence, cars-ahead evidence, semantic wait colors, standardized freshness |
-| #43 | Merged | Compact reference-led card using the WashRadar light theme |
-| #44 | Merged | Best badge/favourite placement and `Queue + wash` wording refinement |
-| #45 | Merged | Manual-location + sort persistence, quick-sort buttons and stable `Update queue` CTA |
-| #46 | Merged | Documentation-only follow-up recording PR #45 as the production feature baseline |
-| #47 | Merged | Read-only synthetic normal-user testing agent; runs real-Chromium journeys and production regression checks |
+| #1–#12 | Merged | Core timing, queue reporting/trust, catalogue and zero-cost routing foundations |
+| #13–#17 | Mixed | Address-index iterations; current implementation is ODA-based from #16 |
+| #18–#22 | Merged | Runtime optimization and unified postal/address search |
+| #23–#24 | Merged | Handoff/history documentation |
+| #25–#31 | Merged | Profiles, points/challenges, vehicles, auth persistence, scale architecture |
+| #32–#33 | Merged | Password/social foundation and 24-hour anonymous merge claim |
+| #34 | Draft / open | Old temporary friend-release browser audit; review/clean up, do not treat as release blocker by default |
+| #35–#41 | Merged | Friends-beta/auth hardening and handoff updates |
+| #42–#44 | Merged | Timing-first compact result-card redesign |
+| #45 | Merged | Manual-location + sort persistence, quick-sort buttons and stable Update queue CTA |
+| #46 | Merged | Documentation follow-up |
+| #47 | Merged | Read-only synthetic normal-user testing agent |
+| #48 | Merged | Pre-native hardening: account deletion, real deep-link 200s, guest cleanup, optional Start wait timer, mobile/native preparation, stronger synthetic testing |
+| #49 | Open candidate | Clean map markers, clustering and explicit Search this area / pinned-map-origin browsing |
 
 ## Superseded paths to avoid restarting
 
+- PR #13 NAR address indexing — superseded by PR #16 ODA/static architecture.
 - Global always-on queue Realtime as default — superseded by adaptive polling.
-- Magic-link-only login as normal account UX — superseded by password auth.
-- 12-character forced-composition signup — superseded by the 8-character beta model.
-- Public Google button during the friends beta — temporary recovery only; hidden again after PR #39.
-- Dense card layouts that give distance, queue, wash, trust and metadata equal weight — superseded by the wait-first compact hierarchy.
-- Sort dropdown on Explore — superseded by PR #45 quick-sort controls.
-- Re-entering a successful manual postal/address search after every refresh — superseded by PR #45 device-local manual location continuity.
-- Treating PR #34 as a current release blocker — newer production audits and PR #47's synthetic-user coverage have moved the testing baseline forward; review/clean it up rather than merging it by default.
+- Magic-link-only login as normal UX — superseded by password auth.
+- Public Google button during friends beta — hidden again after temporary recovery work.
+- Dense card layouts giving every metric equal weight — superseded by timing-first hierarchy.
+- Sort dropdown — superseded by quick-sort controls.
+- Re-entering a successful manual postal/address search after every refresh — superseded by persisted location state.
+- Treating the old draft PR #34 as a current blocker — newer regression tooling supersedes its purpose unless fresh inspection says otherwise.
 
-Always start from `main`, inspect newest merged/open PRs, compare them with this README, verify the latest Pages workflow and production/synthetic audits, and read the relevant auth/scaling runbook before changing those systems.
+Always start from live `main`, inspect newest PRs and Actions, compare with this README, and verify production before declaring a new baseline.

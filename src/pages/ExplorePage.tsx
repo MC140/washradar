@@ -30,7 +30,7 @@ const chips: {type?: WashType; label: string}[] = [
 ];
 
 export function ExplorePage() {
-  const {mode, origin, locationReady, washes, loading, error, offline, filters, setFilters, sort, setSort, favourites, toggleFavourite, locate, search, refresh} = useWashRadar();
+  const {mode, origin, locationReady, washes, loading, error, offline, filters, setFilters, sort, setSort, favourites, toggleFavourite, locate, search, exploreAt, refresh} = useWashRadar();
   const [view, setView] = useState<'list' | 'map'>('list');
   const [query, setQuery] = useState('');
   const [filterOpen, setFilterOpen] = useState(false);
@@ -192,9 +192,22 @@ export function ExplorePage() {
 
       {locationReady && !loading && filtered.length > 0 && (view === 'list'
         ? <div className="cards-grid">{filtered.map((wash) => <WashCard key={wash.id} wash={wash} saved={favourites.includes(wash.id)} onSave={() => void toggleFavourite(wash.id)} onReport={() => setReportingWash(wash)} />)}</div>
-        : <div className="map-section"><Suspense fallback={<div className="map-skeleton" />}>
-            <MapView washes={filtered} origin={origin} selectedId={selectedMapWash?.id} onSelect={setSelectedMapWash} />
-          </Suspense>{selectedMapWash && <div className="map-preview"><button aria-label="Close map preview" onClick={() => setSelectedMapWash(undefined)}>×</button><WashCard compact wash={selectedMapWash} saved={favourites.includes(selectedMapWash.id)} onSave={() => void toggleFavourite(selectedMapWash.id)} onReport={() => setReportingWash(selectedMapWash)} /></div>}</div>
+        : <div className="map-section">
+            <p className="map-browse-hint">Drag the map to another neighbourhood, then choose <strong>Search this area</strong>. Tap a wash marker to see its details.</p>
+            <Suspense fallback={<div className="map-skeleton" />}>
+              <MapView
+                washes={filtered}
+                origin={origin}
+                selectedId={selectedMapWash?.id}
+                onSelect={setSelectedMapWash}
+                onSearchArea={(point) => {
+                  setSelectedMapWash(undefined);
+                  exploreAt(point);
+                }}
+              />
+            </Suspense>
+            {selectedMapWash && <div className="map-preview"><button aria-label="Close map preview" onClick={() => setSelectedMapWash(undefined)}>×</button><WashCard compact wash={selectedMapWash} saved={favourites.includes(selectedMapWash.id)} onSave={() => void toggleFavourite(selectedMapWash.id)} onReport={() => setReportingWash(selectedMapWash)} /></div>}
+          </div>
       )}
 
       <FilterModal open={filterOpen} filters={filters} onChange={setFilters} onClose={() => setFilterOpen(false)} availability={{types: typeDataAvailable, prices: priceDataAvailable, hours: hoursDataAvailable}} />

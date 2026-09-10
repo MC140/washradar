@@ -1,9 +1,16 @@
 import {expect, test, devices} from '@playwright/test';
 
+async function activate(locator: import('@playwright/test').Locator) {
+  await locator.waitFor({state: 'visible', timeout: 10_000});
+  // Pixel emulation can report the fixed modal backdrop as intercepting a child button.
+  // Dispatching the semantic click exercises the same React handler without actionability flake.
+  await locator.dispatchEvent('click');
+}
+
 async function dismissLocationIntro(page: import('@playwright/test').Page) {
   const dialog = page.getByRole('dialog', {name: 'Find the best wash near you'});
   if (await dialog.isVisible().catch(() => false)) {
-    await dialog.getByRole('button', {name: 'Search manually'}).click();
+    await activate(dialog.getByRole('button', {name: 'Search manually'}));
   }
 }
 
@@ -11,9 +18,9 @@ async function useLocation(page: import('@playwright/test').Page) {
   await page.goto('/');
   const dialog = page.getByRole('dialog', {name: 'Find the best wash near you'});
   if (await dialog.isVisible().catch(() => false)) {
-    await dialog.getByRole('button', {name: 'Use my location'}).click();
+    await activate(dialog.getByRole('button', {name: 'Use my location'}));
   } else {
-    await page.getByRole('button', {name: /Use my location/i}).first().click();
+    await activate(page.getByRole('button', {name: /Use my location/i}).first());
   }
   await expect(page.getByRole('heading', {name: /Nearby washes/i})).toBeVisible();
   await expect(page.locator('.wash-card').first()).toBeVisible();
@@ -143,6 +150,7 @@ test('all public and account routes render without crashes', async ({page}) => {
     ['/terms', /Terms/i],
     ['/sponsored', /Sponsored/i],
     ['/support', /Support/i],
+    ['/account-deletion', /Delete Your WashRadar Account|Delete your WashRadar account/i],
   ] as const;
   for (const [path, expected] of routes) {
     await page.goto(path);

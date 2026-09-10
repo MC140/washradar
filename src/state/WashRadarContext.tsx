@@ -41,6 +41,7 @@ type State = {
   refresh: () => Promise<void>;
   locate: () => Promise<void>;
   search: (query: string) => Promise<boolean>;
+  exploreAt: (point: Point) => void;
   setFilters: (filters: WashFilters) => void;
   setSort: (sort: SortMode) => void;
   toggleFavourite: (washId: string) => Promise<void>;
@@ -161,9 +162,6 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
       ]);
       if (version !== refreshVersion.current) return;
 
-      // Normal browsing intentionally uses only local distance + WashRadar queue data.
-      // Traffic-aware navigation is delegated to the user's Maps app after Directions is tapped.
-      // This keeps Google Routes usage at zero while preserving the core queue decision experience.
       setWashes(rankWashes(rawWashes, freshSignals, origin, {preferredTypes: filters.types}));
       setSignals(freshSignals);
       setFavourites(favouriteIds);
@@ -180,9 +178,6 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
     }
   }, [filters.maximumDistanceKm, filters.types, locationReady, origin]);
 
-  // Queue changes are much more frequent than account/directory changes. At scale we
-  // refresh only the live signal feed for the washes already on screen instead of
-  // reloading the full directory, favourites, alerts, auth state and contributor stats.
   const refreshQueueSignals = useCallback(async () => {
     if (!locationReady || repository.mode !== 'supabase' || !activeWashIdsKey) return;
     try {
@@ -200,24 +195,14 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
     analytics.track('app_opened', {mode: repository.mode});
   }, []);
 
-  // Full refreshes happen when the location/filter/account context actually changes.
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
-  // Production defaults to visible-tab adaptive polling. This avoids holding a Realtime
-  // socket per browser and avoids the fan-out pattern where one queue change wakes every
-  // connected user. Realtime remains a config switch for smaller deployments/experiments.
   useEffect(() => {
     if (!locationReady) return;
-
-    if (repository.mode !== 'supabase') {
-      return repository.subscribe(() => void refresh());
-    }
-
-    if (appConfig.queueRefreshMode === 'realtime') {
-      return repository.subscribe(() => void refreshQueueSignals());
-    }
+    if (repository.mode !== 'supabase') return repository.subscribe(() => void refresh());
+    if (appConfig.queueRefreshMode === 'realtime') return repository.subscribe(() => void refreshQueueSignals());
 
     const intervalMs = appConfig.queuePollMs + Math.floor(Math.random() * 4_000);
     const poll = () => {
@@ -253,9 +238,6 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
     };
   }, [refresh]);
 
-  // Queue evidence decays with time even when nobody submits another report. Re-rank
-  // locally once a minute so LIVE/RECENT/ESTIMATED labels cannot become stale on an
-  // open screen. This does not call Google or Supabase and therefore adds no API cost.
   useEffect(() => {
     if (!locationReady) return;
     const timer = window.setInterval(() => {
@@ -327,6 +309,22 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
     return true;
   }, []);
 
+  const exploreAt = useCallback((point: Point) => {
+    if (!Number.isFinite(point.lat) || !Number.isFinite(point.lng) || Math.abs(point.lat) > 90 || Math.abs(point.lng) > 180) return;
+    const label = 'Pinned map area';
+    if (hasStorage()) {
+      const storedLocation: StoredManualLocation = {label, point};
+      localStorage.setItem(manualLocationStorageKey, JSON.stringify(storedLocation));
+    }
+    setCurrentPosition(undefined);
+    setOrigin(point);
+    setLocationLabel(label);
+    setLocationReady(true);
+    setLoading(true);
+    analytics.track('search', {hasResult: true, source: 'map-pan'});
+    toast.success('Showing washes around this map area.');
+  }, []);
+
   const setFilters = useCallback((next: WashFilters) => setFiltersState(next), []);
   const setSort = useCallback((next: SortMode) => setSortState(next), []);
 
@@ -337,9 +335,6 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
     analytics.track('favourite', {washId, saved: save});
   }, [favourites]);
 
-  // A queue report should use a fresh GPS sample, not the location captured when the
-  // user first opened the app. Coarse/blocked GPS does not stop contribution; it simply
-  // removes the location proof so the backend treats the report as low-trust remote data.
   const submitReport = useCallback(async (input: Omit<QueueReportInput, 'position'>) => {
     let verifiedPosition: Point | undefined;
     try {
@@ -355,8 +350,6 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
     return result.verification;
   }, [refresh]);
 
-  // Queue timers are stronger evidence than quick reports, so they require a fresh,
-  // accurate GPS fix and a local proximity check before the server is called.
   const startSession = useCallback(async (washId: string, bucket?: QueueBucket) => {
     const wash = washes.find((item) => item.id === washId);
     if (!wash) throw new Error('This wash is not available right now.');
@@ -421,6 +414,7 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
     refresh,
     locate,
     search,
+    exploreAt,
     setFilters,
     setSort,
     toggleFavourite,
@@ -431,7 +425,7 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
     removeAlert,
     signIn,
     signOut,
-  }), [origin, currentPosition, locationLabel, locationReady, washes, signals, loading, error, offline, favourites, alerts, session, metrics, filters, sort, auth, refresh, locate, search, setFilters, setSort, toggleFavourite, submitReport, startSession, finishSession, createAlert, removeAlert, signIn, signOut]);
+  }), [origin, currentPosition, locationLabel, locationReady, washes, signals, loading, error, offline, favourites, alerts, session, metrics, filters, sort, auth, refresh, locate, search, exploreAt, setFilters, setSort, toggleFavourite, submitReport, startSession, finishSession, createAlert, removeAlert, signIn, signOut]);
 
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
