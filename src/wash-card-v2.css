@@ -1,0 +1,456 @@
+.wash-card.wash-card-v2 {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 18px;
+  border: 1px solid #dfe7e3;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 5px 18px rgba(28, 55, 45, .045);
+  transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+
+.wash-card.wash-card-v2:hover {
+  border-color: #c8d7d0;
+  box-shadow: 0 10px 28px rgba(28, 55, 45, .08);
+  transform: translateY(-1px);
+}
+
+.wash-card.wash-card-v2.best-card {
+  padding: 22px;
+  border: 1px solid #d8e5df;
+  border-radius: 22px;
+  box-shadow: none;
+}
+
+.wash-card-v2 .card-kicker,
+.wash-card-v2-top {
+  min-height: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.wash-card-v2-title {
+  min-width: 0;
+  flex: 1;
+}
+
+.wash-card-v2-best {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 7px;
+  color: #087f65;
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: 1.15px;
+}
+
+.wash-card-v2-title h2 {
+  margin: 0;
+  color: #17221e;
+  font-size: 18px;
+  line-height: 1.2;
+  letter-spacing: -.45px;
+}
+
+.wash-card-v2-title a:hover h2 {
+  color: #087f65;
+}
+
+.wash-card-v2-save {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  color: #718079;
+  background: #f7f9f8;
+  border: 1px solid #edf1ef;
+}
+
+.wash-card-v2-save:hover {
+  background: #f0f5f2;
+}
+
+.wash-card-v2-save.is-saved {
+  color: #087f65;
+}
+
+.wash-card-v2-location {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 7px;
+  color: #69766f;
+  font-size: 10px;
+}
+
+.wash-card-v2-location > button {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  color: #596761;
+  background: transparent;
+  font-size: 10px;
+}
+
+.wash-card-v2-location > button strong {
+  color: #3f4d47;
+  font-size: 10px;
+}
+
+.wash-card-v2-location > button span {
+  color: #718079;
+}
+
+.wash-card-v2-location > button:hover span,
+.wash-card-v2-location > button:hover svg:last-child {
+  color: #087f65;
+}
+
+.wash-card-v2-address {
+  min-width: 0;
+  overflow: hidden;
+  color: #89938e;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wash-card-v2-meta {
+  min-height: 24px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 9px;
+  margin-top: 12px;
+  color: #68756f;
+  font-size: 9px;
+}
+
+.wash-card-v2-type {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 4px 8px;
+  border: 1px solid #dce4e0;
+  border-radius: 999px;
+  color: #58665f;
+  background: #fafbfb;
+  font-weight: 700;
+}
+
+.wash-card-v2-status,
+.wash-card-v2-price {
+  white-space: nowrap;
+}
+
+.wash-card-v2-status::before,
+.wash-card-v2-price::before {
+  content: '·';
+  margin-right: 9px;
+  color: #bcc5c0;
+}
+
+.wash-card-v2-status.unavailable {
+  color: #963d39;
+  font-weight: 700;
+}
+
+.wash-card-v2-focus {
+  display: grid;
+  grid-template-columns: minmax(0, 1.22fr) minmax(116px, .78fr);
+  align-items: center;
+  gap: 16px;
+  margin-top: 13px;
+  padding: 15px 16px;
+  border: 1px solid #edf1ef;
+  border-radius: 14px;
+  background: #f8faf9;
+}
+
+.wash-card-v2-wait {
+  min-width: 0;
+}
+
+.wash-card-v2-wait-value {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  font-family: 'Manrope', ui-sans-serif, system-ui, sans-serif;
+}
+
+.wash-card-v2-wait-value strong {
+  font-size: 37px;
+  line-height: .98;
+  letter-spacing: -1.75px;
+  font-weight: 800;
+}
+
+.wash-card-v2-wait-value span {
+  color: currentColor;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.wash-card-v2-focus.low .wash-card-v2-wait-value {
+  color: #087f65;
+}
+
+.wash-card-v2-focus.medium .wash-card-v2-wait-value {
+  color: #c56a05;
+}
+
+.wash-card-v2-focus.high .wash-card-v2-wait-value {
+  color: #c43c36;
+}
+
+.wash-card-v2-focus.unknown .wash-card-v2-wait-value {
+  color: #68756f;
+}
+
+.wash-card-v2-wait small {
+  display: block;
+  margin-top: 5px;
+  color: #7f8b85;
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: 1.15px;
+}
+
+.wash-card-v2-evidence {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-left: 15px;
+  border-left: 1px solid #e1e7e4;
+}
+
+.wash-card-v2-cars {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #27342f;
+}
+
+.wash-card-v2-cars svg {
+  flex: 0 0 auto;
+  color: #65736d;
+}
+
+.wash-card-v2-cars strong {
+  font-size: 12px;
+  line-height: 1.25;
+  font-weight: 750;
+}
+
+.wash-card-v2-freshness {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #75817b;
+  font-size: 9px;
+  line-height: 1.25;
+}
+
+.wash-card-v2-freshness i {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: #929d98;
+}
+
+.wash-card-v2-freshness.fresh i {
+  background: #20a66f;
+}
+
+.wash-card-v2-freshness.aging i {
+  background: #e2a323;
+}
+
+.wash-card-v2-freshness.stale i {
+  background: #929d98;
+}
+
+.wash-card-v2-unknown {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 2px 0;
+}
+
+.wash-card-v2-unknown strong {
+  color: #4e5c56;
+  font-size: 18px;
+  letter-spacing: -.3px;
+}
+
+.wash-card-v2-unknown span {
+  color: #7d8883;
+  font-size: 10px;
+}
+
+.wash-card-v2-total {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 9px 2px 0;
+  color: #707d76;
+  font-size: 10px;
+}
+
+.wash-card-v2-total svg {
+  color: #73817a;
+}
+
+.wash-card-v2-total strong {
+  margin-left: auto;
+  color: #34413c;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.wash-card-v2-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, .8fr);
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.wash-card-v2-actions > * {
+  width: 100%;
+  min-height: 42px;
+}
+
+.wash-card-v2 .queue-update-button {
+  color: #fff;
+  background: #087f65;
+  border: 1px solid #087f65;
+  box-shadow: 0 5px 13px rgba(8, 127, 101, .16);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.wash-card-v2 .queue-update-button:hover {
+  color: #fff;
+  background: #056650;
+  border-color: #056650;
+}
+
+.wash-card-v2-actions .secondary-button {
+  min-height: 42px;
+  padding: 9px 12px;
+  color: #394740;
+  background: #fff;
+  border-color: #d9e2de;
+  box-shadow: none;
+  font-size: 12px;
+}
+
+.wash-card-v2.compact-card {
+  padding: 16px;
+}
+
+.wash-card-v2.compact-card .wash-card-v2-address,
+.wash-card-v2.compact-card .wash-card-v2-price {
+  display: none;
+}
+
+.wash-card-v2.compact-card .wash-card-v2-focus {
+  margin-top: 10px;
+  padding: 12px;
+}
+
+.wash-card-v2.compact-card .wash-card-v2-wait-value strong {
+  font-size: 32px;
+}
+
+@media (max-width: 700px) {
+  .wash-card.wash-card-v2,
+  .wash-card.wash-card-v2.best-card {
+    padding: 16px;
+    border-radius: 16px;
+  }
+
+  .wash-card-v2-title h2 {
+    font-size: 17px;
+  }
+
+  .wash-card-v2-location {
+    margin-top: 6px;
+  }
+
+  .wash-card-v2-location > button span {
+    display: none;
+  }
+
+  .wash-card-v2-address {
+    font-size: 9px;
+  }
+
+  .wash-card-v2-meta {
+    margin-top: 10px;
+  }
+
+  .wash-card-v2-focus {
+    grid-template-columns: minmax(0, 1.18fr) minmax(110px, .82fr);
+    gap: 12px;
+    margin-top: 11px;
+    padding: 14px;
+  }
+
+  .wash-card-v2-wait-value strong {
+    font-size: 34px;
+  }
+
+  .wash-card-v2-wait-value span {
+    font-size: 13px;
+  }
+
+  .wash-card-v2-evidence {
+    gap: 9px;
+    padding-left: 12px;
+  }
+
+  .wash-card-v2-cars strong {
+    font-size: 11px;
+  }
+
+  .wash-card-v2-freshness {
+    font-size: 8.5px;
+  }
+
+  .wash-card-v2-total {
+    padding-top: 8px;
+  }
+
+  .wash-card-v2-actions {
+    margin-top: 10px;
+  }
+}
+
+@media (max-width: 390px) {
+  .wash-card-v2-address {
+    max-width: 135px;
+  }
+
+  .wash-card-v2-focus {
+    grid-template-columns: minmax(0, 1.12fr) minmax(102px, .88fr);
+    padding: 12px;
+  }
+
+  .wash-card-v2-wait-value strong {
+    font-size: 31px;
+  }
+
+  .wash-card-v2-cars strong {
+    font-size: 10.5px;
+  }
+}
