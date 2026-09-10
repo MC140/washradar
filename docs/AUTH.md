@@ -2,20 +2,17 @@
 
 WashRadar is guest-first. Browsing and basic queue contribution do not require a permanent account.
 
-## User flow
+## Current friends-beta user flow
 
-1. Continue as guest.
-2. When an account is useful, choose an enabled social provider (Google / Apple) or email + password.
-3. Email/password signup verifies the email once when Supabase email confirmations are enabled.
+1. Continue as a guest for browsing and basic queue contribution.
+2. Email + password is the visible permanent-account method.
+3. Friends-beta signup currently uses Supabase with **Confirm email OFF**, so a new account can be created and used immediately.
 4. Normal email/password login sends no email.
-5. Password recovery sends an email only when needed.
-6. The shared Supabase browser session persists across routes and refreshes until explicit sign-out or normal session invalidation.
-
-## Existing magic-link users
-
-Magic-link-only login is no longer the normal account flow. An existing verified account that has no password can use **Forgot / create password** once. Supabase sends a recovery email to `/auth/confirm?mode=recovery`; the user chooses a password and future logins use email + password.
-
-Old outstanding auth links that still return to `/auth/confirm` remain compatible with the callback route.
+5. Google OAuth may remain configured in Supabase, but the public friends-beta UI keeps Google sign-in hidden until there is an explicit launch decision.
+6. Apple sign-in is not currently exposed.
+7. Forgot-password/recovery UI stays hidden until reliable custom SMTP is configured.
+8. Signed-in users can set/change their password from Profile.
+9. The shared Supabase session persists across routes/refreshes until explicit sign-out or normal session invalidation.
 
 ## Anonymous contributor continuity
 
@@ -32,37 +29,66 @@ Transferable:
 Not transferable:
 - anonymous Radar Points;
 - anonymous reputation/trust score;
-- active queue timer state.
+- an active verified wait timer.
 
-This prevents disposable anonymous identities from farming points or trust and then merging those rewards into a permanent account.
+The merge claim is device-held and currently valid for 24 hours. This prevents disposable anonymous identities from farming points or trust and then merging those rewards into a permanent account.
 
-The claim table has RLS enabled with no direct browser policies. The two claim RPCs are `SECURITY DEFINER`, but validate the current Supabase user state internally and use a random short-lived claim token.
+The claim table has RLS enabled with no direct browser policies. The two claim RPCs are `SECURITY DEFINER`, validate the current Supabase user state internally and use a random short-lived claim token.
+
+## Account deletion
+
+Self-service account deletion is part of the pre-native hardening path.
+
+- Signed-in consumer accounts can initiate permanent deletion from `/account-deletion`.
+- The browser calls the authenticated `account-actions` Edge Function.
+- Account-owned profile, favourites, alerts/queue targets, challenge progress, Radar Points, preferences and vehicles use cascade deletion with the Auth user where appropriate.
+- Queue reports, completed queue-session evidence and wash-type reports may retain the observation with `user_id = null` where the database intentionally uses `ON DELETE SET NULL`. This preserves aggregate timing/data integrity without retaining the deleted account association.
+- An account that owns an advertiser/business record is not deleted automatically. The Edge Function returns a review-required error so ownership can be transferred or closed safely.
+- After deletion the client signs out locally and clears local merge/wait-session markers.
+
+Supabase notes that deleting a user does not instantly invalidate already-issued JWTs. Sensitive server-side operations must therefore continue to authenticate/authorize every request and should not treat client sign-out as the only security boundary.
 
 ## Social providers
 
-The frontend supports Google and Apple OAuth but only renders a provider button when `/auth/v1/settings` reports that provider as enabled. Provider credentials are external Supabase/provider configuration and must never be committed to this repository.
+The frontend contains support for Google/Apple OAuth, but social buttons should only be exposed when the product explicitly enables that provider and the corresponding provider configuration is production-ready.
 
-Required before enabling a social provider:
-- create the provider credentials in Google Cloud or Apple Developer;
-- configure the provider in Supabase Authentication -> Providers;
-- register the Supabase callback/redirect URLs exactly as required by that provider;
-- verify `https://washradar.ca/auth/confirm?mode=oauth` returns to a persisted WashRadar session.
+Before native social sign-in is enabled:
+- create/configure provider credentials in Google Cloud / Apple Developer;
+- configure the provider in Supabase Authentication;
+- register both web and native callback/deep-link URLs;
+- verify that the callback returns to a persisted WashRadar session;
+- verify anonymous-contribution merge behavior across the provider transition.
 
-Supabase automatic identity linking may link a verified OAuth identity to an existing account with the same verified email.
+Do not make Google public merely because the backend provider is configured.
 
 ## Email delivery / SMTP
 
-Signup verification and password recovery still require email delivery. Normal password/social login does not.
+The friends beta currently avoids mandatory email sends because Confirm email is OFF and password recovery remains hidden.
 
-Before broad public launch, configure custom SMTP (for example Resend) in Supabase Authentication so verification and recovery are not dependent on Supabase's built-in test mailer.
+Before broad public/native launch:
+1. configure custom SMTP in Supabase Authentication;
+2. verify password-reset delivery and callback behavior on web, iOS and Android;
+3. only then expose forgot-password recovery broadly;
+4. decide separately whether signup email verification should be enabled.
 
 ## Password security
 
 - Passwords are handled by Supabase Auth, never stored in WashRadar profile/application tables.
 - WashRadar requires at least 8 characters client-side; Supabase remains the authority for server-side password policy.
-- Enable Supabase **Leaked Password Protection** before broad public launch. The database security advisor currently reports it disabled.
-- Keep auth rate limits enabled and consider CAPTCHA/Turnstile for signup/anonymous-auth abuse as public traffic grows.
+- Enable Supabase **Leaked Password Protection** before broad public/native launch when the project plan supports it. The current security advisor reports it disabled.
+- Keep auth rate limits enabled and consider CAPTCHA/Turnstile if public signup or anonymous-auth abuse becomes material.
 
-## PWA/session behavior
+## Web/PWA session behavior
 
-The production shared client uses `persistSession`, `autoRefreshToken`, and `detectSessionInUrl`. Service-worker cache `washradar-shell-v6` was introduced with this account model so installed mobile clients do not remain on the old magic-link form.
+The production shared client uses Supabase session persistence and token refresh. Installed PWA clients must continue to receive service-worker updates rather than remaining on stale auth UI.
+
+## Native app requirements
+
+The native apps should reuse the existing React/Supabase account model through Capacitor rather than create a second account system.
+
+Before App Store / Play production release:
+- store native session secrets using an appropriate secure-storage bridge rather than relying only on ordinary WebView local storage;
+- support native app lifecycle/resume and auth deep links;
+- include native WebView origins in Edge Function CORS where needed;
+- keep the public `https://washradar.ca/account-deletion` resource available for store compliance;
+- test account creation, login, logout, deletion and anonymous-to-permanent contribution continuity on physical iOS and Android devices.
