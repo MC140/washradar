@@ -8,6 +8,7 @@ import './styles.css';
 import './ui-polish.css';
 import './release-polish.css';
 import './native-hardening.css';
+import './map-polish.css';
 
 installCostOptimizations();
 installAddressAutocomplete();
