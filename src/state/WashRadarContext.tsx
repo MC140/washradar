@@ -162,9 +162,6 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
       ]);
       if (version !== refreshVersion.current) return;
 
-      // Normal browsing intentionally uses only local distance + WashRadar queue data.
-      // Traffic-aware navigation is delegated to the user's Maps app after Directions is tapped.
-      // This keeps Google Routes usage at zero while preserving the core queue decision experience.
       setWashes(rankWashes(rawWashes, freshSignals, origin, {preferredTypes: filters.types}));
       setSignals(freshSignals);
       setFavourites(favouriteIds);
@@ -204,14 +201,8 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
 
   useEffect(() => {
     if (!locationReady) return;
-
-    if (repository.mode !== 'supabase') {
-      return repository.subscribe(() => void refresh());
-    }
-
-    if (appConfig.queueRefreshMode === 'realtime') {
-      return repository.subscribe(() => void refreshQueueSignals());
-    }
+    if (repository.mode !== 'supabase') return repository.subscribe(() => void refresh());
+    if (appConfig.queueRefreshMode === 'realtime') return repository.subscribe(() => void refreshQueueSignals());
 
     const intervalMs = appConfig.queuePollMs + Math.floor(Math.random() * 4_000);
     const poll = () => {
@@ -330,7 +321,7 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
     setLocationLabel(label);
     setLocationReady(true);
     setLoading(true);
-    analytics.track('map_area_search', {source: 'map-pan'});
+    analytics.track('search', {hasResult: true, source: 'map-pan'});
     toast.success('Showing washes around this map area.');
   }, []);
 
