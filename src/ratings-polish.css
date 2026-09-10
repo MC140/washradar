@@ -1,3 +1,10 @@
+/* The existing header star is Google/provider catalogue data. Keep it hidden on
+   Details until it has explicit provider attribution, so it cannot be mistaken
+   for the first-party WashRadar Ratings score below. */
+.status-line > span:has(svg.lucide-star) {
+  display: none;
+}
+
 .wash-rating-panel {
   overflow: hidden;
 }
