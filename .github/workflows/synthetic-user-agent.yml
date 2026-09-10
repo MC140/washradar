@@ -9,11 +9,14 @@ on:
     types: [completed]
   pull_request:
     paths:
-      - 'scripts/synthetic-user-agent.ts'
+      - 'src/**'
+      - 'public/**'
+      - 'scripts/**'
       - '.github/workflows/synthetic-user-agent.yml'
-      - 'playwright.live.config.ts'
+      - 'index.html'
       - 'package.json'
       - 'package-lock.json'
+      - 'vite.config.ts'
 
 permissions:
   contents: read
@@ -28,10 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      # Pull-request runs execute the candidate test code against current production,
-      # not a branch preview. New production-only routes therefore become mandatory only
-      # after merge/deploy, while all existing production journeys still run on the PR.
-      WASHRADAR_EXPECT_DEPLOYED_CHANGES: ${{ github.event_name == 'pull_request' && 'false' || 'true' }}
+      WASHRADAR_URL: ${{ github.event_name == 'pull_request' && 'http://127.0.0.1:4173' || 'https://washradar.ca' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -43,6 +43,26 @@ jobs:
           cache: npm
 
       - run: npm ci
+
+      - name: Build candidate app for PR testing
+        if: github.event_name == 'pull_request'
+        run: npm run build
+
+      - name: Start candidate preview for PR testing
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          npm run preview > /tmp/washradar-preview.log 2>&1 &
+          preview_pid=$!
+          echo "PREVIEW_PID=$preview_pid" >> "$GITHUB_ENV"
+          for attempt in {1..30}; do
+            if curl --fail --silent --show-error "$WASHRADAR_URL/" >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/washradar-preview.log
+          exit 1
 
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
