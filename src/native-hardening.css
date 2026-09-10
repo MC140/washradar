@@ -1,0 +1,149 @@
+/* Pre-native hardening shared by PWA and future Capacitor shells. */
+
+/* Large GTA searches can return 100+ cards. Let the browser skip layout/paint work for
+   off-screen cards while preserving the full ranked result set. */
+.cards-grid .wash-card {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 270px;
+}
+
+/* Store-quality touch targets. Keep the visual treatment compact, but make every common
+   mobile navigation/action surface comfortably tappable before it reaches a WebView. */
+@media (max-width: 760px) {
+  .detail-actions button,
+  .queue-start-options button,
+  .quick-sort button,
+  .view-toggle button,
+  .card-actions a,
+  .card-actions button,
+  .back-link,
+  .save-large,
+  .detail-quick-directions,
+  .text-button,
+  .site-header .location-button,
+  .site-header .profile-link,
+  .bottom-nav a,
+  .bottom-nav button,
+  .site-footer a,
+  .filter-chips button,
+  .open-toggle {
+    min-height: 44px;
+  }
+
+  /* Preserve the compact 30px visual circles while giving the save/directions controls
+     a full 44px hit box. */
+  .wash-card-v2 .wash-card-v2-save,
+  .wash-card-v2 .wash-card-v2-directions {
+    position: relative;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    flex: 0 0 44px;
+    border: 0;
+    background: transparent;
+  }
+
+  .wash-card-v2 .wash-card-v2-save::before,
+  .wash-card-v2 .wash-card-v2-directions::before {
+    content: '';
+    position: absolute;
+    inset: 7px;
+    border: 1px solid #dce5e1;
+    border-radius: 50%;
+    background: #fff;
+  }
+
+  .wash-card-v2 .wash-card-v2-save svg,
+  .wash-card-v2 .wash-card-v2-directions svg {
+    position: relative;
+    z-index: 1;
+  }
+
+  .wash-card-v2 .wash-card-v2-save.is-saved::before {
+    border-color: #cfe3da;
+    background: var(--green-pale);
+  }
+
+  .wash-card-v2 .wash-card-v2-save:hover::before,
+  .wash-card-v2 .wash-card-v2-directions:hover::before {
+    border-color: #b9d3c8;
+    background: #f8fbf9;
+  }
+
+  .wash-card-v2 .wash-card-v2-name-row > a {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+  }
+
+  .wash-card-v2 .wash-card-v2-actions > * {
+    min-height: 44px;
+  }
+
+  .back-link,
+  .detail-quick-directions,
+  .text-button,
+  .site-footer a,
+  .open-toggle {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .site-header .brand,
+  .site-header .profile-link {
+    min-height: 44px;
+  }
+
+  .site-header .profile-link {
+    min-width: 44px;
+    justify-content: center;
+  }
+
+  .site-footer nav {
+    align-items: center;
+  }
+}
+
+.wait-timer-note {
+  margin-top: 10px;
+  max-width: 720px;
+}
+
+.account-delete-panel {
+  max-width: 720px;
+  margin: 32px auto;
+}
+
+.account-delete-warning {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  margin: 20px 0;
+}
+
+.account-delete-warning svg {
+  flex: 0 0 auto;
+}
+
+.account-delete-confirm {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 18px 0;
+  line-height: 1.4;
+}
+
+.account-delete-confirm input {
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+}
+
+.danger-button {
+  background: #9f3030;
+}
+
+.danger-button:hover {
+  background: #842626;
+}

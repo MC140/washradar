@@ -9,11 +9,14 @@ on:
     types: [completed]
   pull_request:
     paths:
-      - 'scripts/synthetic-user-agent.ts'
+      - 'src/**'
+      - 'public/**'
+      - 'scripts/**'
       - '.github/workflows/synthetic-user-agent.yml'
-      - 'playwright.live.config.ts'
+      - 'index.html'
       - 'package.json'
       - 'package-lock.json'
+      - 'vite.config.ts'
 
 permissions:
   contents: read
@@ -27,6 +30,8 @@ jobs:
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      WASHRADAR_URL: ${{ github.event_name == 'pull_request' && 'http://localhost:4173' || 'https://washradar.ca' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -38,6 +43,48 @@ jobs:
           cache: npm
 
       - run: npm ci
+
+      - name: Hydrate deployed search indexes for PR preview
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          # Production creates both the small FSA postal index and the richer ODA address
+          # index during Pages deployment. The repository intentionally keeps only tiny
+          # fallbacks, so a PR candidate must hydrate BOTH production-generated indexes
+          # before we compare its browser behavior with washradar.ca.
+          curl --fail --silent --show-error --location \
+            https://washradar.ca/postal-index.json \
+            --output public/postal-index.json
+          curl --fail --silent --show-error --location \
+            https://washradar.ca/address-index/areas.json \
+            --output public/address-index/areas.json
+          python3 - <<'PY'
+          import json
+          postal=json.load(open('public/postal-index.json', encoding='utf-8'))
+          keys={str(row[0]).lower() for row in postal.get('areas', [])}
+          assert 'm1x' in keys, 'M1X missing from hydrated production postal index'
+          print(f'Hydrated production postal index: {len(keys)} FSAs; M1X present')
+          PY
+
+      - name: Build candidate app for PR testing
+        if: github.event_name == 'pull_request'
+        run: npm run build
+
+      - name: Start candidate preview for PR testing
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          npm run preview > /tmp/washradar-preview.log 2>&1 &
+          preview_pid=$!
+          echo "PREVIEW_PID=$preview_pid" >> "$GITHUB_ENV"
+          for attempt in {1..30}; do
+            if curl --fail --silent --show-error "$WASHRADAR_URL/" >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/washradar-preview.log
+          exit 1
 
       - name: Install Chromium
         run: npx playwright install --with-deps chromium

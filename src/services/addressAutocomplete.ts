@@ -1,3 +1,4 @@
+import {appConfig} from '../config/env';
 import type {Point} from '../domain/models';
 import {repository} from './index';
 
@@ -37,7 +38,12 @@ function postalFsa(value: string) {
 }
 
 function baseUrl(path: string) {
-  return new URL(path.replace(/^\//, ''), new URL(import.meta.env.BASE_URL, window.location.href)).toString();
+  const relative = path.replace(/^\//, '');
+  if (appConfig.addressIndexBase) {
+    const configured = appConfig.addressIndexBase.endsWith('/') ? appConfig.addressIndexBase : `${appConfig.addressIndexBase}/`;
+    return new URL(relative.replace(/^address-index\//, ''), configured).toString();
+  }
+  return new URL(relative, new URL(import.meta.env.BASE_URL, window.location.href)).toString();
 }
 
 async function loadAreas(): Promise<AreaIndex> {

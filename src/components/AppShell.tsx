@@ -62,6 +62,7 @@ export function AppShell() {
           <Link to="/terms">Terms</Link>
           <Link to="/sponsored">Sponsored content</Link>
           <Link to="/support">Support</Link>
+          <Link to="/account-deletion">Delete account</Link>
         </nav>
         <small>Queue, price and availability information may change. Verify before travelling.</small>
       </footer>

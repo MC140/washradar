@@ -13,6 +13,7 @@ export const appConfig = {
   googleMapsBrowserKey: raw.VITE_GOOGLE_MAPS_BROWSER_KEY || '',
   mapTileUrl: raw.VITE_MAP_TILE_URL || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
   mapAttribution: raw.VITE_MAP_ATTRIBUTION || '© OpenStreetMap contributors',
+  addressIndexBase: raw.VITE_ADDRESS_INDEX_BASE || '',
   supportEmail: raw.VITE_SUPPORT_EMAIL || 'support@washradar.ca',
   sentryDsn: raw.VITE_SENTRY_DSN || '',
   queueRefreshMode,
