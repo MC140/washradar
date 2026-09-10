@@ -2,13 +2,19 @@ import {createClient} from 'npm:@supabase/supabase-js@2.57.4';
 
 function allowedOrigin(request: Request) {
   const origin = request.headers.get('origin') ?? '';
-  const builtIn = ['https://mc140.github.io', 'https://washradar.ca', 'https://www.washradar.ca'];
+  const builtIn = [
+    'https://mc140.github.io',
+    'https://washradar.ca',
+    'https://www.washradar.ca',
+    'capacitor://localhost',
+    'ionic://localhost',
+  ];
   const configured = (Deno.env.get('ALLOWED_ORIGINS') ?? '')
     .split(',')
     .map((value) => value.trim())
     .filter(Boolean);
   const allowed = new Set([...builtIn, ...configured]);
-  if (!origin || allowed.has(origin) || origin.startsWith('http://localhost:')) return origin || '*';
+  if (!origin || allowed.has(origin) || origin.startsWith('http://localhost:') || origin.startsWith('https://localhost:')) return origin || '*';
   return '';
 }
 
