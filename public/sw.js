@@ -1,4 +1,4 @@
-const CACHE = 'washradar-shell-v7';
+const CACHE = 'washradar-shell-v8';
 const scopeUrl = new URL(self.registration.scope);
 const local = (path) => new URL(path, scopeUrl).toString();
 const SHELL = [local('./'), local('offline.html'), local('favicon.svg'), local('icon-192.png'), local('icon-512.png')];
