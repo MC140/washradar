@@ -27,6 +27,11 @@ jobs:
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      # Pull-request runs execute the candidate test code against current production,
+      # not a branch preview. New production-only routes therefore become mandatory only
+      # after merge/deploy, while all existing production journeys still run on the PR.
+      WASHRADAR_EXPECT_DEPLOYED_CHANGES: ${{ github.event_name == 'pull_request' && 'false' || 'true' }}
     steps:
       - uses: actions/checkout@v4
         with:
