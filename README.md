@@ -29,7 +29,7 @@ Do not restart old/superseded work merely because it appears in historical notes
 
 # Current production baseline — 2026-09-09
 
-Production includes feature work through **PR #42**.
+Production includes feature work through **PR #43** once this release is merged/deployed.
 
 ## Friends-beta account model
 
@@ -66,7 +66,7 @@ Do not re-enable password-reset UI until email delivery is reliable.
 
 ---
 
-# Recent release hardening — PRs #33–#42
+# Recent release hardening — PRs #33–#43
 
 - **PR #33** extended anonymous-account merge claims to 24 hours.
 - **PR #35** fixed cold-start/shared wash detail loading, hardened a privileged wash-type RPC, restored Saved/queue-target state on reload, clarified in-app-only queue targets, and hardened friends-beta auth behavior.
@@ -76,6 +76,7 @@ Do not re-enable password-reset UI until email delivery is reliable.
 - **PR #39** hid Google again after recovery while keeping signed-in password change available.
 - **PR #41** refreshed this handoff to the current friends-beta state.
 - **PR #42** redesigned result cards around the core decision: wait time first, cars ahead second, standardized freshness, and queue + wash total. Wait numbers use green for 0–15 min, amber for 16–39 min, red for 40+ min, and neutral styling when queue data is unknown.
+- **PR #43** compacts the cards further using the approved reference hierarchy while keeping the existing WashRadar light theme: business name + directions + distance on the left, dominant estimated wait + cars ahead on the right, a thin freshness/footer row, `At the wash · ~X min` with `+ drive time` clearly separated, and equal-width `Details` / `Update queue` actions. Full street address and secondary card metadata are removed from the primary result card.
 
 Current production validation includes green deterministic queue/trust tests, desktop/mobile live-user journeys, post-deploy production audit, and a synthetic transactional challenge lifecycle audit that was rolled back after testing.
 
@@ -173,9 +174,9 @@ Remote evidence is deliberately weak and cannot by itself create a strong `LIVE`
 
 Queue buckets are `NO QUEUE`, `1–3`, `4–7`, `8–12`, and `12+`. The backend maps each bucket to a representative car count and combines it with the wash's minutes-per-car model. It does **not** fake a continuously decreasing car count after a report. Evidence freshness decays over time and old evidence expires.
 
-Result cards intentionally make **wait time the primary decision number** and **cars ahead supporting evidence**. Freshness is shown with one consistent `Updated X min ago` pattern. The secondary `Queue + wash` number excludes drive time; live traffic and ETA remain in the user's Maps app. Unknown queues display `No recent reports` instead of fake zeroes.
+Result cards intentionally make **wait time the primary decision number** and **cars ahead supporting evidence**. The card no longer shows full street address or secondary price/type/status metadata in the primary scan path. The footer uses one compact freshness line and shows **`At the wash · ~X min`** for queue + wash only, with **`+ drive time`** on a separate line so WashRadar never implies it knows live driving ETA. Directions still opens the user's Maps app for traffic-aware travel time.
 
-Wait-time card colors are semantic: **green 0–15 min**, **amber 16–39 min**, **red 40+ min**, with gray/neutral treatment for unknown data. Freshness dot color is separate and reflects report age rather than wait severity.
+Wait-time card colors are semantic: **green 0–15 min**, **amber 16–39 min**, **red 40+ min**, with gray/neutral treatment for unknown data. Freshness dot color separately reflects report age. The `Best right now` badge is only used on the single featured match rather than every card.
 
 Open clients typically receive another user's accepted queue update within roughly **20 seconds plus jitter**; the submitting client refreshes immediately after a successful write.
 
@@ -282,6 +283,7 @@ Active Edge Functions: `ad-events`, `admin`, `analytics-events`, `geo-services`,
 | #40 | Closed / superseded | Stale README refresh attempt; superseded by clean PR #41 |
 | #41 | Merged | Current friends-beta README/handoff refresh |
 | #42 | Merged | Timing-first card redesign: wait prominence, cars-ahead evidence, semantic wait colors, standardized freshness, queue + wash total |
+| #43 | Pending merge | Compact reference-led card: light-theme layout, no address clutter, icon directions, `At the wash` + separate drive time, equal actions |
 
 ## Superseded paths to avoid restarting
 
@@ -289,6 +291,6 @@ Active Edge Functions: `ad-events`, `admin`, `analytics-events`, `geo-services`,
 - Magic-link-only login as normal account UX — superseded by password auth.
 - 12-character forced-composition signup — superseded by the 8-character beta model.
 - Public Google button during the friends beta — temporary recovery only; hidden again after PR #39.
-- Dense card layouts that give distance, queue, wash, trust and metadata equal weight — superseded by PR #42's timing-first hierarchy.
+- Dense card layouts that give distance, queue, wash, trust and metadata equal weight — superseded by PR #42/#43's wait-first compact hierarchy.
 
 Always start from `main`, inspect newest merged PRs, verify the latest Pages workflow, and read the relevant auth/scaling runbook before changing those systems.
