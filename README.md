@@ -29,7 +29,7 @@ Do not restart old/superseded work merely because it appears in historical notes
 
 # Current production baseline — 2026-09-09
 
-Production includes feature work through **PR #45** after this release is merged and deployed.
+Production includes feature work through **PR #45**.
 
 ## Friends-beta account model
 
@@ -329,7 +329,7 @@ Active Edge Functions: `ad-events`, `admin`, `analytics-events`, `geo-services`,
 | #42 | Merged | Timing-first card redesign: wait prominence, cars-ahead evidence, semantic wait colors, standardized freshness |
 | #43 | Merged | Compact reference-led card using the WashRadar light theme |
 | #44 | Merged | Best badge/favourite placement and `Queue + wash` wording refinement |
-| #45 | Pending merge | Manual-location + sort persistence, quick-sort buttons and stable `Update queue` CTA |
+| #45 | Merged | Manual-location + sort persistence, quick-sort buttons and stable `Update queue` CTA |
 
 ## Superseded paths to avoid restarting
 
