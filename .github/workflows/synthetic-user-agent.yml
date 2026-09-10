@@ -44,17 +44,27 @@ jobs:
 
       - run: npm ci
 
-      - name: Hydrate deployed address index for PR preview
+      - name: Hydrate deployed search indexes for PR preview
         if: github.event_name == 'pull_request'
         shell: bash
         run: |
-          # The repository intentionally keeps only a tiny city fallback. Production
-          # deployment builds the richer ODA/FSA index. Pull that deployed static index
-          # into the local candidate so postal-search behavior matches production without
-          # relying on cross-origin browser fetches.
+          # Production creates both the small FSA postal index and the richer ODA address
+          # index during Pages deployment. The repository intentionally keeps only tiny
+          # fallbacks, so a PR candidate must hydrate BOTH production-generated indexes
+          # before we compare its browser behavior with washradar.ca.
+          curl --fail --silent --show-error --location \
+            https://washradar.ca/postal-index.json \
+            --output public/postal-index.json
           curl --fail --silent --show-error --location \
             https://washradar.ca/address-index/areas.json \
             --output public/address-index/areas.json
+          python3 - <<'PY'
+          import json
+          postal=json.load(open('public/postal-index.json', encoding='utf-8'))
+          keys={str(row[0]).lower() for row in postal.get('areas', [])}
+          assert 'm1x' in keys, 'M1X missing from hydrated production postal index'
+          print(f'Hydrated production postal index: {len(keys)} FSAs; M1X present')
+          PY
 
       - name: Build candidate app for PR testing
         if: github.event_name == 'pull_request'
