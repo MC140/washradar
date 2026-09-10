@@ -77,7 +77,12 @@ export function WashCard({
 
   return (
     <article className={`wash-card wash-card-v2 tone-${tone} ${best ? 'best-card' : ''}${bestWait ? ' best-wait-card' : ''}${compact ? ' compact-card' : ''}`}>
-      {bestWait && <span className="wash-card-v2-best"><span aria-hidden="true">✦</span> Best right now</span>}
+      <div className={`wash-card-v2-topline${bestWait ? '' : ' no-badge'}`}>
+        {bestWait && <span className="wash-card-v2-best"><span aria-hidden="true">✦</span> Best right now</span>}
+        <button className={'wash-card-v2-save ' + (saved ? 'is-saved' : '')} type="button" onClick={onSave} aria-label={saved ? 'Remove from saved washes' : 'Save this wash'} title={saved ? 'Saved' : 'Save'}>
+          <Heart size={16} fill={saved ? 'currentColor' : 'none'} />
+        </button>
+      </div>
 
       <div className="wash-card-v2-main">
         <div className="wash-card-v2-identity">
@@ -85,9 +90,6 @@ export function WashCard({
             <Link to={'/wash/' + wash.id} onClick={viewDetails}><h2>{wash.name}</h2></Link>
             <button className="wash-card-v2-directions" type="button" onClick={directions} aria-label={'Get directions to ' + wash.name} title="Directions">
               <Navigation size={16} />
-            </button>
-            <button className={'wash-card-v2-save ' + (saved ? 'is-saved' : '')} type="button" onClick={onSave} aria-label={saved ? 'Remove from saved washes' : 'Save this wash'} title={saved ? 'Saved' : 'Save'}>
-              <Heart size={16} fill={saved ? 'currentColor' : 'none'} />
             </button>
           </div>
           <span className="wash-card-v2-distance">{wash.distanceKm.toFixed(1)} km away</span>
@@ -118,7 +120,7 @@ export function WashCard({
           <span>{hasQueueData ? `${source} · ${minutesAgo(wash.estimate.lastUpdatedAt)}` : 'No recent queue report'}</span>
         </div>
         <div className="wash-card-v2-total">
-          <span>{queueAndWashMinutes !== null ? <>At the wash · <strong>~{queueAndWashMinutes} min</strong></> : <>At the wash · <strong>unknown</strong></>}</span>
+          <span>{queueAndWashMinutes !== null ? <>Queue + wash · <strong>~{queueAndWashMinutes} min</strong></> : <>Queue + wash · <strong>unknown</strong></>}</span>
           <small>+ drive time</small>
         </div>
       </div>
