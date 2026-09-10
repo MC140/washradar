@@ -1,0 +1,64 @@
+/* Pre-native hardening shared by PWA and future Capacitor shells. */
+
+/* Large GTA searches can return 100+ cards. Let the browser skip layout/paint work for
+   off-screen cards while preserving the full ranked list and accessibility tree. */
+.cards-grid .wash-card {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 270px;
+}
+
+/* Store-quality touch targets. Existing visual sizes can remain compact while the
+   actionable hit area stays comfortably tappable. */
+@media (max-width: 760px) {
+  .detail-actions button,
+  .queue-start-options button,
+  .quick-sort button,
+  .view-toggle button,
+  .card-actions a,
+  .card-actions button {
+    min-height: 44px;
+  }
+}
+
+.wait-timer-note {
+  margin-top: 10px;
+  max-width: 720px;
+}
+
+.account-delete-panel {
+  max-width: 720px;
+  margin: 32px auto;
+}
+
+.account-delete-warning {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  margin: 20px 0;
+}
+
+.account-delete-warning svg {
+  flex: 0 0 auto;
+}
+
+.account-delete-confirm {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 18px 0;
+  line-height: 1.4;
+}
+
+.account-delete-confirm input {
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+}
+
+.danger-button {
+  background: #9f3030;
+}
+
+.danger-button:hover {
+  background: #842626;
+}
