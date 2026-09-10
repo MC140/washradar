@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      WASHRADAR_URL: ${{ github.event_name == 'pull_request' && 'http://127.0.0.1:4173' || 'https://washradar.ca' }}
+      WASHRADAR_URL: ${{ github.event_name == 'pull_request' && 'http://localhost:4173' || 'https://washradar.ca' }}
     steps:
       - uses: actions/checkout@v4
         with:
