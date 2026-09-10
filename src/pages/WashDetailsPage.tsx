@@ -101,10 +101,10 @@ export function WashDetailsPage() {
     }
     const freshLocation = await requestLocation();
     if (freshLocation.accuracy > QUEUE_CONFIG.maximumAccurateGpsMetres) {
-      throw new Error('GPS accuracy is too low to verify a queue timer. Try again in a moment or move closer to the wash entrance.');
+      throw new Error('GPS accuracy is too low to verify a wait timer. Try again in a moment or move closer to the wash entrance.');
     }
     if (distanceKm(freshLocation.point, wash.position) > QUEUE_CONFIG.nearbyRadiusKm) {
-      throw new Error('You need to be at this car wash to start a verified queue timer. Quick queue reports still work from anywhere.');
+      throw new Error('You need to be at this car wash to start a verified wait timer. Quick queue reports still work from anywhere.');
     }
     await repository.startQueueSession(wash.id, freshLocation.point, bucket);
     await refresh();
@@ -139,9 +139,10 @@ export function WashDetailsPage() {
             <p className="disclaimer"><TriangleAlert size={14} /> Travel time and traffic are intentionally left to your navigation app. WashRadar focuses on distance and queue conditions.</p>
             <div className="detail-actions">
               <button className="queue-update-button" onClick={() => setReportOpen(true)}>Update queue</button>
-              <button className="secondary-button" disabled={Boolean(session)} onClick={() => setQueueOpen(true)}><TimerReset size={17} /> Join queue</button>
+              <button className="secondary-button" disabled={Boolean(session)} onClick={() => setQueueOpen(true)}><TimerReset size={17} /> Start wait timer</button>
               <button className="secondary-button" onClick={() => setAlertOpen(true)}><Bell size={17} /> Alert me</button>
             </div>
+            <p className="disclaimer wait-timer-note"><Clock3 size={14} /> Updating the queue is what helps other drivers immediately. The optional wait timer is only for drivers physically at the wash who want to contribute a stronger actual-wait sample.</p>
           </section>
 
           {ad && <NearbyOffer ad={ad} placement="wash_detail_nearby_offer" />}
@@ -170,15 +171,15 @@ export function WashDetailsPage() {
 
         <aside className="panel reports-panel">
           <p className="eyebrow">RECENT DRIVER REPORTS</p><h2>What drivers are seeing</h2><p>Nearby verified reports carry more weight. Exact device locations are never displayed.</p>
-          {recent.length ? recent.map((signal) => <article className="report-row" key={signal.id}><span><Check size={16} /></span><div><strong>{reportLabels[signal.kind]}{signal.waitMinutes !== null ? ' · ' + signal.waitMinutes + ' min' : ''}</strong><p>{minutesAgo(signal.createdAt)} · {signal.verification === 'remote' ? 'Remote report' : signal.verification === 'session' ? 'Verified queue session' : 'Verified nearby'}</p></div></article>) : <div className="no-reports"><Clock3 size={25} /><strong>No recent driver reports</strong><p>{wash.historicalSampleCount > 0 ? 'A historical estimate may still be available.' : 'There is no queue estimate yet. A quick driver report helps everyone.'}</p></div>}
+          {recent.length ? recent.map((signal) => <article className="report-row" key={signal.id}><span><Check size={16} /></span><div><strong>{reportLabels[signal.kind]}{signal.waitMinutes !== null ? ' · ' + signal.waitMinutes + ' min' : ''}</strong><p>{minutesAgo(signal.createdAt)} · {signal.verification === 'remote' ? 'Remote report' : signal.verification === 'session' ? 'Verified wait timer' : 'Verified nearby'}</p></div></article>) : <div className="no-reports"><Clock3 size={25} /><strong>No recent driver reports</strong><p>{wash.historicalSampleCount > 0 ? 'A historical estimate may still be available.' : 'There is no queue estimate yet. A quick driver report helps everyone.'}</p></div>}
           <button className="queue-update-button full" onClick={() => setReportOpen(true)}>Update queue</button>
         </aside>
       </div>
       <ReportModal open={reportOpen} initialWash={wash} onClose={() => setReportOpen(false)} />
       <AlertModal open={alertOpen} wash={wash} onClose={() => setAlertOpen(false)} />
       <QueueStartModal open={queueOpen} onClose={() => setQueueOpen(false)} onStart={async (bucket) => {
-        try { await startQueue(bucket); setQueueOpen(false); toast.success('Verified queue timer started.'); }
-        catch (error) { toast.error(error instanceof Error ? error.message : 'The timer could not start.'); }
+        try { await startQueue(bucket); setQueueOpen(false); toast.success('Verified wait timer started.'); }
+        catch (error) { toast.error(error instanceof Error ? error.message : 'The wait timer could not start.'); }
       }} />
       <PriceCorrectionModal open={priceOpen} washId={wash.id} onClose={() => setPriceOpen(false)} />
     </>
@@ -227,7 +228,7 @@ function PriceCorrectionModal({open, washId, onClose}: {open: boolean; washId: s
 function QueueStartModal({open, onClose, onStart}: {open: boolean; onClose: () => void; onStart: (bucket?: QueueBucket) => Promise<void>}) {
   const [busy, setBusy] = useState(false);
   const options: {label: string; bucket?: QueueBucket}[] = [{label: 'Skip this question'}, {label: 'No queue', bucket: 'none'}, {label: '1–3 ahead', bucket: '1-3'}, {label: '4–7 ahead', bucket: '4-7'}, {label: '8+ ahead', bucket: '8-12'}];
-  return <Modal open={open} onClose={onClose} title="Start verified queue timer" description="How many cars are ahead? This is optional. WashRadar will request a fresh GPS reading to verify that you are actually near this wash.">
+  return <Modal open={open} onClose={onClose} title="Track my actual wait" description="Optional: use this only when you are physically in line. WashRadar records the elapsed wait so future estimates can learn from real completed waits. A fresh GPS reading verifies that you are near this wash.">
     <div className="queue-start-options">{options.map((option) => <button disabled={busy} key={option.label} onClick={async () => {setBusy(true); try {await onStart(option.bucket);} finally {setBusy(false);}}}>{option.label}</button>)}</div>
   </Modal>;
 }
