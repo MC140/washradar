@@ -30,36 +30,18 @@ Do not restart old/superseded work merely because it appears in historical notes
 
 # Current production baseline — 2026-09-10
 
-Production runs `main` through **PR #48**, followed by a small production-audit wording fix on `main`.
+Production runs `main` through **PR #49**.
 
 - **PR #45** is the last large result-card/search-persistence feature release before native hardening.
 - **PR #46** is a documentation-only follow-up.
 - **PR #47** added the read-only synthetic normal-user testing agent.
 - **PR #48** is the **pre-native production-hardening baseline**. It added self-service account deletion, true HTTP-200 app-route entry points, guest-network cleanup, optional verified wait-timer wording/behavior, mobile/native hardening, native-ready address-index configuration and stronger candidate-build regression testing.
 - Direct commit `d8ba61a…` aligned the older production audit with the new **Start wait timer** wording.
+- **PR #49** cleaned the map UX, added overlap clustering and added explicit **Search this area** / persisted pinned-map-origin browsing. It also added a dedicated regression agent for the map behavior and removed the Pixel-emulation intro-sheet click flake from the older production audit.
 
-PR #48's candidate build passed quality checks and the synthetic user suite before merge. Its GitHub Pages deployment, `main` quality checks and the post-deploy synthetic user agent also completed successfully.
+PR #49 merged at `4936e3eb…`. Its exact candidate head passed quality and synthetic checks before merge. After merge, the `main` quality run, GitHub Pages deployment, post-deploy synthetic agent and post-deploy production Playwright audit all completed successfully. The production synthetic agent explicitly verified the new map-marker and **Search this area** journey.
 
-The separate older production Playwright suite later exposed a **Pixel-emulation click-actionability flake on the introductory location sheet**: Playwright reported the sheet backdrop intercepting child-button clicks even though the newer synthetic suite and real browsing worked. **PR #49 includes a test-only correction using the same semantic click method already used by the newer synthetic agent.** Do not interpret that stale red run as evidence that location/manual search is broken for users.
-
-## Current candidate — PR #49
-
-PR #49, **Clean map markers and add Search this area**, is currently under validation.
-
-Its intended behavior is:
-
-- remove error-like `?` and `×` wash markers;
-- show a neutral dot when recent queue/wait evidence is unavailable;
-- show a subdued neutral dot for unavailable/closed listings instead of an `×`;
-- show a wait-minute number only when meaningful queue evidence exists;
-- use the same semantic wait thresholds as the result cards: green 0–15, amber 16–39, red 40+;
-- cluster overlapping wash pins into count bubbles;
-- keep marker selection as a detail-preview action;
-- let users pan the map and choose **Search this area** to make the map center the active nearby-wash origin;
-- persist that pinned map area across refresh until the user chooses another manual search or **Use my location**;
-- add no paid Google Routes or geocoding usage for map-area browsing.
-
-Do not mark PR #49 as production until its exact final head passes quality + synthetic checks, merges, deploys, and passes the post-deploy production checks.
+This is the production baseline to use before beginning the Capacitor iOS/Android foundation.
 
 ---
 
@@ -107,7 +89,7 @@ A successful **manual city, postal-code or street-address search is stored local
 
 Manual search coordinates are not treated as verified GPS. If the user later chooses **Use my location** and a fresh GPS fix succeeds, the saved manual/pinned area is cleared and current GPS becomes the active origin. If GPS fails while a manual area is active, WashRadar keeps the working manual area.
 
-PR #49 extends this same model to map browsing: panning itself does not fire queries. After the user moves the map, **Search this area** explicitly promotes the map center to the active search origin. This is designed to feel like normal map discovery without issuing accidental searches during every drag.
+Map browsing follows the same model. Panning itself does not fire queries. After the user moves the map, **Search this area** explicitly promotes the map center to the active search origin. That pinned map area persists across refresh until the user chooses another manual search or **Use my location**.
 
 ## Quick sorting
 
@@ -142,11 +124,15 @@ Wait colors are semantic: **green 0–15 min**, **amber 16–39 min**, **red 40+
 The map is a discovery layer, not a place to expose uncertainty as error-like punctuation.
 
 - Known queue/wait evidence may show a wait-minute number.
-- Unknown timing should be a neutral marker, not `?`.
-- Closed/unavailable should be visually subdued, not `×`.
-- Dense nearby listings should cluster into numeric count markers.
+- Unknown timing is a neutral marker, not `?`.
+- Closed/unavailable listings are visually subdued, not `×`.
+- Dense nearby listings cluster into numeric count markers; choosing a cluster zooms in.
 - Tapping a single wash marker opens its existing preview/details.
-- Panning should reveal **Search this area** instead of automatically replacing the user's location.
+- Panning reveals **Search this area** instead of automatically replacing the user's location.
+- The center target shows the prospective search point before the user commits it.
+- The map reset control returns the viewport to the active search origin.
+
+The production map regression agent checks that `?`/`×` wash markers do not return, that marker selection works, that **Search this area** changes the active origin and that the pinned area survives reload.
 
 ---
 
@@ -338,12 +324,11 @@ SMTP/password-recovery delivery can remain deferred until wider release and is *
 
 # Near-term priorities
 
-1. Finish PR #49 map UX validation and merge only after its final exact head is green.
-2. Verify the PR #49 production deployment, post-deploy synthetic suite and production Playwright journey audit.
-3. Test the complete **Find wash → inspect wait/cars ahead → Update queue → optional Start wait timer → verify updated queue/timing** loop with multiple independent real sessions at an actual wash.
-4. Begin the Capacitor iOS/Android foundation from the verified production baseline.
-5. Keep Google Routes disabled for normal browsing and keep ODA address data static/outside Supabase.
-6. Configure SMTP, leaked-password protection, public social login, native push and crash reporting when their release phase requires them rather than prematurely coupling them to the native foundation.
+1. Test the complete **Find wash → inspect wait/cars ahead → Update queue → optional Start wait timer → verify updated queue/timing** loop with multiple independent real sessions at an actual wash.
+2. Begin the Capacitor iOS/Android foundation from the verified PR #49 production baseline.
+3. Preserve the current map interaction in native: tap markers for detail and explicitly **Search this area** after panning.
+4. Keep Google Routes disabled for normal browsing and keep ODA address data static/outside Supabase.
+5. Configure SMTP, leaked-password protection, public social login, native push and crash reporting when their release phase requires them rather than prematurely coupling them to the native foundation.
 
 ---
 
@@ -364,7 +349,7 @@ SMTP/password-recovery delivery can remain deferred until wider release and is *
 | #46 | Merged | Documentation follow-up |
 | #47 | Merged | Read-only synthetic normal-user testing agent |
 | #48 | Merged | Pre-native hardening: account deletion, real deep-link 200s, guest cleanup, optional Start wait timer, mobile/native preparation, stronger synthetic testing |
-| #49 | Open candidate | Clean map markers, clustering and explicit Search this area / pinned-map-origin browsing |
+| #49 | Merged | Clean map markers, clustering, explicit Search this area and persisted pinned-map-origin browsing; dedicated map regression coverage |
 
 ## Superseded paths to avoid restarting
 
