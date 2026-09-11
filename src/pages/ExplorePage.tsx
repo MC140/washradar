@@ -38,7 +38,7 @@ export function ExplorePage() {
   const [selectedMapWash, setSelectedMapWash] = useState<RankedWash>();
   const [reportingWash, setReportingWash] = useState<RankedWash>();
   const [ads, setAds] = useState<AdCreative[]>([]);
-  const [locationPrompt, setLocationPrompt] = useState(() => localStorage.getItem('wr-location-intro') !== 'seen');
+  const [locationPrompt, setLocationPrompt] = useState(() => !locationReady && localStorage.getItem('wr-location-intro') !== 'seen');
 
   const typeCounts = useMemo(() => {
     const counts = new Map<WashType, number>();
@@ -59,6 +59,12 @@ export function ExplorePage() {
   useEffect(() => {
     if (!sortOptions.includes(sort)) setSort('Recommended');
   }, [sort, setSort, priceDataAvailable, queueDataAvailable]);
+
+  useEffect(() => {
+    if (!locationReady || !locationPrompt) return;
+    localStorage.setItem('wr-location-intro', 'seen');
+    setLocationPrompt(false);
+  }, [locationReady, locationPrompt]);
 
   const filtered = useMemo(() => {
     const typeFilterActive = typeDataAvailable && filters.types.length > 0;
@@ -100,7 +106,7 @@ export function ExplorePage() {
       return;
     }
     let cancelled = false;
-    void getNearbyAds('explore_nearby_offer', origin, 5).then((creatives) => !cancelled && setAds(creatives));
+    void getNearbyAds('explore_nearby_offer', origin).then((creatives) => !cancelled && setAds(creatives));
     return () => { cancelled = true; };
   }, [locationReady, origin]);
 
@@ -220,7 +226,7 @@ export function ExplorePage() {
 
       <FilterModal open={filterOpen} filters={filters} onChange={setFilters} onClose={() => setFilterOpen(false)} availability={{types: typeDataAvailable, prices: priceDataAvailable, hours: hoursDataAvailable}} />
       <ReportModal open={Boolean(reportingWash)} initialWash={reportingWash} onClose={() => setReportingWash(undefined)} />
-      <Modal open={locationPrompt} onClose={() => {localStorage.setItem('wr-location-intro', 'seen'); setLocationPrompt(false);}} title="Find the best wash near you" description="Share your location once to compare nearby drive and queue times. WashRadar does not keep a public GPS trail.">
+      <Modal open={locationPrompt} onClose={() => {localStorage.setItem('wr-location-intro', 'seen'); setLocationPrompt(false);}} title="Find the best wash near you" description="Share your location once to compare nearby drive and queue times. WashRadar stores only the selected browsing area on this device; it does not keep a public GPS trail.">
         <div className="location-consent-actions"><button className="primary-button" onClick={async () => {localStorage.setItem('wr-location-intro', 'seen'); setLocationPrompt(false); await locate();}}>Use my location</button><button className="secondary-button" onClick={() => {localStorage.setItem('wr-location-intro', 'seen'); setLocationPrompt(false);}}>Search manually</button></div>
       </Modal>
     </>
