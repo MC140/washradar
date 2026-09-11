@@ -10,10 +10,11 @@ For the standard local package, ask for only these items:
 
 1. **Business name** — exactly how it should appear in WashRadar.
 2. **Business address** — the physical location used to centre the 5 km ad radius.
-3. **Best customer link** — website, booking page, offer page, or another approved destination URL.
-4. **Offer/message** — one sentence describing what they want drivers to know. If they do not have copy, WashRadar can write it from their business/service and ask them to approve it.
-5. **Contact person** — name, email and phone number for billing/approvals; this stays private.
-6. **Optional logo/image** — not required for the first text-first local placement.
+3. **Business category / what you do** — for example auto detailing, tire shop, restaurant, coffee shop, oil change, dealership or another local service.
+4. **Best customer link** — website, booking page, offer page, or another approved destination URL.
+5. **Offer/message** — one sentence describing what they want drivers to know. If they do not have copy, WashRadar can write it from their business/service and ask them to approve it.
+6. **Contact person** — name, email and phone number for billing/approvals; this stays private.
+7. **Optional logo/image** — not required for the first text-first local placement.
 
 That is enough for WashRadar to prepare the campaign. The business does **not** need to provide latitude/longitude, postal-code targeting rules, ad-tech settings, analytics tags, or a formatted creative.
 
@@ -47,7 +48,7 @@ The business should approve the final copy before activation. A simple written c
 
 ## Internal Supabase mapping
 
-- `advertiser_businesses` — business identity, private owner/contact relationship, verification state.
+- `advertiser_businesses` — business identity, category, private owner/contact relationship, verification state.
 - `ad_campaigns` — monthly/flat booking, booked price, dates, priority and frequency cap.
 - `ad_geo_targets` — v1 uses `target_kind = 'radius'`, a geographic centre and `radius_km`.
 - `ad_creatives` — headline, body, CTA, destination and disclosure.
@@ -56,7 +57,7 @@ The business should approve the final copy before activation. A simple written c
 
 ## Business-facing message
 
-> To put your business live on WashRadar, send us your business name, business address, the link you want customers to open, what you want to promote, and your contact name/email/phone. A logo is optional. We handle the location targeting, ad formatting and tracking. Our standard local package is C$100/month and targets WashRadar users within 5 km of your business. We send you the final ad for approval before it goes live.
+> To put your business live on WashRadar, send us: **(1) business name, (2) business address, (3) what your business does, (4) the website/booking/offer link you want customers to open, (5) what you want to promote, and (6) your contact name, email and phone number.** A logo or image is optional. We handle the location targeting, ad formatting and tracking. Our standard local package is C$100/month and targets WashRadar users within 5 km of your business. We send you the final ad for approval before it goes live.
 
 ## Launch principle
 
