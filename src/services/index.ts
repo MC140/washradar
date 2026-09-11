@@ -1,6 +1,8 @@
+import type {AdCreative, Point} from '../domain/models';
 import {appConfig, hasSupabaseConfiguration} from '../config/env';
 import {DemoRepository} from './demoRepository';
 import {SupabaseRepository} from './supabaseRepository';
+import {loadLocalAds} from './ads';
 import {UnavailableRepository, type ContributionMetrics, type WashRepository} from './repository';
 import {supabaseClient} from './supabaseClient';
 
@@ -16,8 +18,32 @@ supabaseRepository.metrics = async () => {
   return session ? loadSupabaseMetrics() : emptyMetrics;
 };
 
+// Route single-ad callers through the same server-hashed, radius-only selector used by
+// the multi-ad inventory so Details and cached placements share the same targeting rules.
+supabaseRepository.getAd = async (placement, origin, washId) => {
+  const ads = await loadLocalAds(placement, origin, 1, washId);
+  return ads[0] ?? null;
+};
+
 export const repository: WashRepository = appConfig.demoMode
   ? new DemoRepository()
   : hasSupabaseConfiguration
     ? supabaseRepository
     : new UnavailableRepository();
+
+export async function getNearbyAds(placement: string, origin: Point, limit = 5, washId?: string): Promise<AdCreative[]> {
+  const safeLimit = Math.max(1, Math.min(5, Math.floor(limit || 5)));
+  if (repository.mode === 'supabase') return loadLocalAds(placement, origin, safeLimit, washId);
+  if (repository.mode !== 'demo') return [];
+
+  const ads: AdCreative[] = [];
+  const seenBusinesses = new Set<string>();
+  for (let attempt = 0; attempt < safeLimit * 2 && ads.length < safeLimit; attempt++) {
+    const ad = await repository.getAd(placement, origin, washId);
+    if (!ad) break;
+    if (seenBusinesses.has(ad.businessName)) continue;
+    seenBusinesses.add(ad.businessName);
+    ads.push(ad);
+  }
+  return ads;
+}

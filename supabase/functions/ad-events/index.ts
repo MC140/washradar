@@ -1,7 +1,18 @@
 import {z} from 'npm:zod@4.1.8';
 import {cors, hashValue, json, serviceClient} from '../_shared/http.ts';
 
-const schema = z.object({
+const selectSchema = z.object({
+  action: z.literal('select'),
+  placement: z.string().min(2).max(80),
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+  clientId: z.string().uuid(),
+  limit: z.number().int().min(1).max(5).default(5),
+  washId: z.string().uuid().optional(),
+});
+
+const eventSchema = z.object({
+  action: z.literal('event').optional(),
   event: z.enum(['impression', 'click']),
   creativeId: z.string().uuid(),
   campaignId: z.string().uuid(),
@@ -13,10 +24,33 @@ const schema = z.object({
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return new Response(null, {status: 204, headers: cors(request)});
   if (request.method !== 'POST') return json(request, {error: 'Method not allowed.'}, 405);
-  const parsed = schema.safeParse(await request.json().catch(() => null));
+
+  const payload = await request.json().catch(() => null);
+  const db = serviceClient();
+
+  if (payload?.action === 'select') {
+    const parsed = selectSchema.safeParse(payload);
+    if (!parsed.success) return json(request, {error: 'Invalid advertising selection request.'}, 400);
+    const input = parsed.data;
+    const sessionHash = await hashValue(input.clientId);
+    const {data, error} = await db.rpc('select_ads', {
+      p_placement_slug: input.placement,
+      p_lat: input.lat,
+      p_lng: input.lng,
+      p_session_hash: sessionHash,
+      p_limit: input.limit,
+      p_wash_id: input.washId ?? null,
+    });
+    if (error) {
+      console.error(JSON.stringify({event: 'ad_selection_failed', placement: input.placement, message: error.message}));
+      return json(request, {error: 'Nearby sponsors could not be loaded.'}, 503);
+    }
+    return json(request, {ads: data ?? []});
+  }
+
+  const parsed = eventSchema.safeParse(payload);
   if (!parsed.success) return json(request, {error: 'Invalid advertising event.'}, 400);
   const input = parsed.data;
-  const db = serviceClient();
   const sessionHash = await hashValue(input.clientId);
   const [{data: campaign}, {data: creative}, {data: placement}] = await Promise.all([
     db.from('ad_campaigns').select('id,status,starts_at,ends_at').eq('id', input.campaignId).single(),

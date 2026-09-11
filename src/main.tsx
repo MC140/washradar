@@ -10,6 +10,7 @@ import './release-polish.css';
 import './native-hardening.css';
 import './map-polish.css';
 import './ratings-polish.css';
+import './ads-polish.css';
 
 installCostOptimizations();
 installAddressAutocomplete();
