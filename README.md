@@ -30,7 +30,7 @@ Do not restart old/superseded work merely because it appears in historical notes
 
 # Current production baseline — 2026-09-10
 
-Production runs `main` through **PR #50**.
+Production runs `main` through **PR #51**.
 
 - **PR #45** is the last large result-card/search-persistence feature release before native hardening.
 - **PR #46** is a documentation-only follow-up.
@@ -39,8 +39,9 @@ Production runs `main` through **PR #50**.
 - Direct commit `d8ba61a…` aligned the older production audit with the new **Start wait timer** wording.
 - **PR #49** cleaned the map UX, added overlap clustering and added explicit **Search this area** / persisted pinned-map-origin browsing. It also added a dedicated regression agent for the map behavior and removed the Pixel-emulation intro-sheet click flake from the older production audit.
 - **PR #50** added first-party **WashRadar Ratings** as a structured, no-free-text quality layer on wash Details. It added secure aggregate/read and validated write RPCs, server-derived Verified visit evidence, guest-to-account rating continuity and dedicated read-only ratings regression coverage.
+- **PR #51** added the first production-ready **hyperlocal local-business ad inventory**: up to five clearly labelled sponsored businesses around the active WashRadar origin, coordinate/radius-only targeting for paid v1, one visible slot per advertiser, working frequency caps through server-hashed session IDs, and manual advertiser onboarding without requiring the business to create a WashRadar account.
 
-PR #50 merged at `578a1ba6…`. Its exact candidate head passed quality and synthetic checks before merge. After merge, the `main` quality run, GitHub Pages deployment, post-deploy synthetic agent and post-deploy production Playwright audit all completed successfully. The production synthetic agent explicitly verified the existing map journey and the new structured WashRadar Ratings panel/RPC/modal flow without submitting production data.
+PR #51 merged at `8e29964e…`. Its exact candidate head passed quality and synthetic checks before merge. After merge, the `main` quality run, GitHub Pages deployment, post-deploy synthetic agent and post-deploy production Playwright audit all completed successfully. No advertiser/campaign/creative/impression/click rows were seeded into production during the release; the paid-ad engine was validated with rollback-only transactions.
 
 This is the production baseline to use before beginning the Capacitor iOS/Android foundation.
 
@@ -150,6 +151,22 @@ Wash Details includes a separate **WashRadar Ratings** section as a secondary qu
 
 Do not add unrestricted written reviews until moderation/reporting/blocking and UGC policy requirements are deliberately implemented.
 
+## Hyperlocal sponsored businesses
+
+WashRadar's initial monetization path is location-relevant sponsorship, separate from organic wash ranking.
+
+- GPS, city/postal/address search and **Search this area** all resolve to an active latitude/longitude origin; that same origin is used for ad eligibility.
+- Paid v1 uses **coordinate + radius targeting only**. Do not activate city/neighbourhood/region targets until their matching rules are explicit.
+- Explore can return up to **5 sponsored businesses** around the active origin.
+- One business gets at most one visible slot in a single request.
+- Campaign frequency caps use a server-hashed local session/device identifier; raw readable device identity is not stored in ad impression rows.
+- Paid placement never changes `Recommended`, wait time, queue evidence, WashRadar Ratings or any other organic truth signal.
+- Early advertiser onboarding is deliberately manual. A business does **not** need a WashRadar account; staff can manage an advertiser with `owner_user_id = NULL`.
+- Private advertiser contact fields remain behind RLS and are not part of public ad selection.
+- The beta commercial default documented in `docs/ADVERTISER_INTAKE.md` is **C$100/month for a 5 km radius**; pricing/radius can be revised after real sales/renewal evidence.
+
+Before activating a business, collect its business name, full physical address, business category, customer destination link, offer/message, and private contact name/email/phone. Logo/image is optional. WashRadar derives coordinates, formats the ad, applies disclosure/targeting, tracks impressions/clicks and sends the final creative for approval.
+
 ---
 
 # Queue trust and timing
@@ -229,6 +246,7 @@ GitHub Pages (React + Vite PWA)
         |     +-- profiles / vehicles
         |     +-- challenges / progress / points
         |     +-- favourites / queue targets
+        |     +-- advertiser/campaign/creative/placement data
         |
         +-- queue freshness
         |     +-- DEFAULT: visible-tab polling of queue_signal_feed
@@ -239,6 +257,7 @@ GitHub Pages (React + Vite PWA)
         |     +-- queue signal feed
         |     +-- direct wash detail
         |     +-- structured rating summary/upsert
+        |     +-- radius-only local sponsor selection (service role)
         |     +-- contribution rewards/challenges
         |     +-- account/anonymous-history helpers
         |
@@ -248,6 +267,7 @@ GitHub Pages (React + Vite PWA)
               +-- geocode fallback
               +-- controlled Places ingestion
               +-- wash-type evidence
+              +-- ad selection + impression/click tracking
               +-- ads/analytics
               +-- protected admin/moderation
 
@@ -257,7 +277,7 @@ Directions --> Google Maps / Apple Maps on the user's device
 Main folders:
 
 - `src/domain` — ranking, queue estimation, confidence, contributor config.
-- `src/services` — repositories, Supabase adapter, search, auth/community, analytics and queue refresh.
+- `src/services` — repositories, Supabase adapter, search, auth/community, analytics, local ads and queue refresh.
 - `src/components`, `src/pages` — UI.
 - `src/state` — app state plus device-local location/filter/sort continuity.
 - `supabase/migrations` — schema/RLS/indexes/RPCs/triggers.
@@ -267,6 +287,7 @@ Main folders:
 - `release-tests` — production Playwright user journeys.
 - `docs/AUTH.md` — account/auth security model.
 - `docs/SCALING.md` — capacity/upgrade runbook.
+- `docs/ADVERTISER_INTAKE.md` — manual local-ad sales/onboarding checklist.
 - `tests`, `e2e` — deterministic/browser coverage.
 
 ---
@@ -281,6 +302,7 @@ Normal browsing is designed to avoid paid Google routing traffic:
 - Postal/FSA search — static generated index — $0/search.
 - Street/house autocomplete — static partitioned open-address files — $0/search.
 - Map-area search — coordinate-based nearby lookup; no geocode required.
+- Local ad matching — coordinate/radius PostGIS lookup against booked campaigns; no paid geocode required at impression time.
 - Traffic/ETA — user's Maps app after Directions — $0 to WashRadar.
 - Google Routes — disabled for normal browsing.
 - Google Places — administrative catalogue maintenance/enrichment only.
@@ -343,11 +365,12 @@ SMTP/password-recovery delivery can remain deferred until wider release and is *
 # Near-term priorities
 
 1. Test the complete **Find wash → inspect wait/cars ahead → Update queue → optional Start wait timer → verify updated queue/timing** loop with multiple independent real sessions at an actual wash.
-2. Begin the Capacitor iOS/Android foundation from the verified PR #50 production baseline.
+2. Begin the Capacitor iOS/Android foundation from the verified PR #51 production baseline.
 3. Preserve the current map interaction in native: tap markers for detail and explicitly **Search this area** after panning.
 4. Keep structured WashRadar Ratings secondary to timing; do not add unrestricted written reviews without a deliberate moderation/UGC phase.
 5. Keep Google Routes disabled for normal browsing and keep ODA address data static/outside Supabase.
-6. Configure SMTP, leaked-password protection, public social login, native push and crash reporting when their release phase requires them rather than prematurely coupling them to the native foundation.
+6. Pilot the local-ad sales motion manually before building a self-serve advertiser portal: C$100/month, 5 km radius is the initial hypothesis, not a permanent pricing promise.
+7. Configure SMTP, leaked-password protection, public social login, native push and crash reporting when their release phase requires them rather than prematurely coupling them to the native foundation.
 
 ---
 
@@ -370,6 +393,7 @@ SMTP/password-recovery delivery can remain deferred until wider release and is *
 | #48 | Merged | Pre-native hardening: account deletion, real deep-link 200s, guest cleanup, optional Start wait timer, mobile/native preparation, stronger synthetic testing |
 | #49 | Merged | Clean map markers, clustering, explicit Search this area and persisted pinned-map-origin browsing; dedicated map regression coverage |
 | #50 | Merged | Structured first-party WashRadar Ratings, Verified visit evidence, secure aggregate/write RPCs and ratings regression coverage |
+| #51 | Merged | Five-slot hyperlocal radius-based sponsored business inventory, server-hashed frequency caps and manual no-account advertiser onboarding |
 
 ## Superseded paths to avoid restarting
 
@@ -381,5 +405,6 @@ SMTP/password-recovery delivery can remain deferred until wider release and is *
 - Sort dropdown — superseded by quick-sort controls.
 - Re-entering a successful manual postal/address search after every refresh — superseded by persisted location state.
 - Treating the old draft PR #34 as a current blocker — newer regression tooling supersedes its purpose unless fresh inspection says otherwise.
+- Treating non-radius city/neighbourhood/region ad targets as ready for sale — paid v1 is radius-only until explicit matching rules are implemented.
 
 Always start from live `main`, inspect newest PRs and Actions, compare with this README, and verify production before declaring a new baseline.
