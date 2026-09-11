@@ -18,32 +18,35 @@ Before substantive WashRadar work:
 
 1. Read current `main` and this README.
 2. Check the newest merged/open PRs and compare them with this handoff.
-3. Check the latest **Deploy WashRadar to GitHub Pages**, quality, production-audit and synthetic-user runs.
+3. Check the latest **Deploy WashRadar to Cloudflare Pages**, quality, production-audit and synthetic-user runs.
 4. Read `docs/AUTH.md` before auth/account work.
 5. Read `docs/SCALING.md` before capacity work.
 6. Read `docs/MONETIZATION.md` before changing ads, pricing, placements or advertiser packages.
 7. Read `docs/DATA_MODEL.md` before changing durable product data or location persistence.
-8. Treat GitHub `main`, production Supabase, GitHub Actions and observed production behavior as final truth.
+8. Treat GitHub `main`, production Supabase, GitHub Actions, Cloudflare Pages and observed production behavior as final truth.
 
 Do not restart old/superseded work merely because it appears in historical notes.
 
 ---
 
-# Current production baseline — PR #52
+# Current production baseline — PR #56
 
-**PR #52 — Persist selected location and harden monetization config** is the current functional production baseline.
+**PR #56 — Finalize Cloudflare Pages production cutover** is the current production-infrastructure baseline.
 
-It builds on:
+The current functional product baseline remains the feature set introduced through PR #52, with the hosting cutover layered on top:
 
 - PR #48 — pre-native hardening;
 - PR #49 — map cleanup, clustering and `Search this area`;
 - PR #50 — structured first-party WashRadar Ratings;
 - PR #51 — hyperlocal local-business ad inventory;
-- PR #52 — durable GPS/manual/map location persistence, readable monetization/data-model docs and server-configurable ad inventory limits.
+- PR #52 — durable GPS/manual/map location persistence, readable monetization/data-model docs and server-configurable ad inventory limits;
+- PR #54 — validated Cloudflare Pages deployment pipeline running alongside GitHub Pages during cutover;
+- PR #55 — production audits and synthetic-user runs switched to trigger from Cloudflare Pages deployments;
+- PR #56 — old GitHub Pages deployment workflow and GitHub-only `public/CNAME` retired after both `washradar.ca` and `www.washradar.ca` became active on Cloudflare Pages.
 
-PR #52 merge commit: `ed5ad5bed7b5b4efe6df59b9c07644e3fd00d184`.
+Before the final GitHub Pages cleanup, the Cloudflare production deployment passed static-search checks, synthetic user flows, location persistence, map / `Search this area`, structured ratings and the live read-only production browser audit.
 
-Candidate quality and the full synthetic/browser suite passed on the exact final PR head before merge. The production GitHub Pages deployment also completed successfully. Post-deploy production/synthetic audits are the final release gate and should be checked whenever resuming work.
+Cloudflare Pages is now the intended production web host. GitHub remains the source repository and CI/CD control plane; Supabase remains the application backend.
 
 ---
 
@@ -227,17 +230,25 @@ OpenStreetMap-derived map tiles are fine for early testing when policy-compliant
 # Current architecture
 
 ```text
-GitHub Pages — React + Vite PWA
+GitHub — source code + pull requests + GitHub Actions
         |
-        +-- static app shell
-        +-- static postal/FSA + GTA ODA address indexes
-        +-- device-local selected location/filter/sort continuity
+        +-- build zero-cost postal/FSA index
+        +-- restore/build static GTA ODA address index
+        +-- build React + Vite PWA into dist/
         |
-        +-- Supabase Auth
-        +-- Supabase Postgres + PostGIS + RLS
-        +-- RPCs/triggers for nearby lookup, queue, ratings, rewards and ads
-        +-- Edge Functions for protected writes/actions and ad events
+        +-- deploy dist/ to Cloudflare Pages
+                     |
+                     +-- static app shell
+                     +-- static postal/FSA + GTA ODA address indexes
+                     +-- CDN + TLS + production custom domains
+                     |
+                     +-- Supabase Auth
+                     +-- Supabase Postgres + PostGIS + RLS
+                     +-- RPCs/triggers for nearby lookup, queue, ratings, rewards and ads
+                     +-- Edge Functions for protected writes/actions and ad events
 
+Cloudflare DNS / Pages --> https://washradar.ca + https://www.washradar.ca
+Cloudflare Email Routing --> support/contact aliases to the configured destination inbox
 Directions --> Google Maps / Apple Maps on the user's device
 ```
 
@@ -266,7 +277,7 @@ Recommended app identifier remains `ca.washradar.app` for iOS and Android unless
 
 # Testing / release gates
 
-Do not treat a merge alone as production proof. A release should be considered healthy only after the relevant candidate checks, main quality run, Pages deployment, post-deploy production audit and post-deploy synthetic-user suite are green.
+Do not treat a merge alone as production proof. A release should be considered healthy only after the relevant candidate checks, main quality run, **Cloudflare Pages deployment**, post-deploy production audit and post-deploy synthetic-user suite are green.
 
 The synthetic suite includes normal-user browsing, manual search, location denial recovery, map behavior, structured ratings and selected-location persistence across refresh.
 
@@ -278,6 +289,6 @@ For queue trust, still perform real-device / real-wash testing, especially:
 
 # Next recommended phase
 
-With the web baseline hardened through PR #52, the highest-value next phase remains **real-user mobile testing at actual wash locations**, followed by the Capacitor iOS/Android foundation once the physical queue flow is trusted.
+With the web baseline hardened through PR #56 and production hosting moved to Cloudflare Pages, the highest-value next phase remains **real-user mobile testing at actual wash locations**, followed by the Capacitor iOS/Android foundation once the physical queue flow is trusted.
 
 Keep the product focused: **distance + cars ahead + wait + wash time** first; secondary features and monetization should not dilute that decision experience.
