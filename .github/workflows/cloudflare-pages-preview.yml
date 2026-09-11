@@ -1,8 +1,9 @@
-name: Deploy WashRadar preview to Cloudflare Pages
+name: Deploy WashRadar to Cloudflare Pages
 
 on:
   push:
     branches:
+      - main
       - infra/cloudflare-pages-preview
   workflow_dispatch:
 
@@ -10,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: cloudflare-pages-preview
+  group: cloudflare-pages-${{ github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -18,7 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      WASHRADAR_URL: https://cloudflare-preview.washradar.pages.dev
+      CLOUDFLARE_BRANCH: ${{ github.ref_name == 'main' && 'main' || 'cloudflare-preview' }}
+      WASHRADAR_URL: ${{ github.ref_name == 'main' && 'https://washradar.pages.dev' || 'https://cloudflare-preview.washradar.pages.dev' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -90,10 +92,12 @@ jobs:
         env:
           VITE_DEMO_MODE: "false"
           VITE_BASE_PATH: "/"
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
           VITE_GOOGLE_MAPS_BROWSER_KEY: ${{ secrets.VITE_GOOGLE_MAPS_BROWSER_KEY }}
-          VITE_SUPPORT_EMAIL: support@washradar.ca
-          VITE_MAP_TILE_URL: https://tile.openstreetmap.org/{z}/{x}/{y}.png
-          VITE_MAP_ATTRIBUTION: © OpenStreetMap contributors
+          VITE_SUPPORT_EMAIL: ${{ vars.VITE_SUPPORT_EMAIL }}
+          VITE_MAP_TILE_URL: ${{ vars.VITE_MAP_TILE_URL }}
+          VITE_MAP_ATTRIBUTION: ${{ vars.VITE_MAP_ATTRIBUTION }}
           VITE_QUEUE_REFRESH_MODE: poll
           VITE_QUEUE_POLL_MS: "20000"
 
@@ -126,18 +130,18 @@ jobs:
             exit 1
           fi
 
-      - name: Deploy preview to Cloudflare Pages
+      - name: Deploy to Cloudflare Pages
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           npx --yes wrangler@4.131.0 pages deploy dist \
             --project-name=washradar \
-            --branch=cloudflare-preview \
+            --branch="${CLOUDFLARE_BRANCH}" \
             --commit-hash="${GITHUB_SHA}" \
-            --commit-message="Cloudflare Pages preview from GitHub Actions"
+            --commit-message="Cloudflare Pages deployment from GitHub Actions"
 
-      - name: Wait for Cloudflare preview and verify static search assets
+      - name: Wait for Cloudflare deployment and verify static search assets
         shell: bash
         run: |
           set -euo pipefail
@@ -146,7 +150,7 @@ jobs:
               break
             fi
             if [ "$attempt" = 30 ]; then
-              echo "Cloudflare preview did not become reachable in time."
+              echo "Cloudflare deployment did not become reachable in time."
               exit 1
             fi
             sleep 2
@@ -157,9 +161,9 @@ jobs:
           import json
           postal=json.load(open('/tmp/postal-index.json', encoding='utf-8'))
           keys={str(row[0]).lower() for row in postal.get('areas', [])}
-          assert 'm1x' in keys, 'Cloudflare preview postal index is missing M1X'
+          assert 'm1x' in keys, 'Cloudflare postal index is missing M1X'
           areas=json.load(open('/tmp/address-areas.json', encoding='utf-8'))
-          assert areas, 'Cloudflare preview address-area index is empty'
+          assert areas, 'Cloudflare address-area index is empty'
           print(f'Cloudflare static indexes healthy: {len(keys)} postal FSAs')
           PY
 
@@ -190,7 +194,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: cloudflare-preview-synthetic-report-${{ github.run_id }}
+          name: cloudflare-pages-synthetic-report-${{ github.run_id }}
           path: synthetic-user-results
           if-no-files-found: warn
           retention-days: 14
