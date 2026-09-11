@@ -5,7 +5,7 @@ on:
   schedule:
     - cron: '17 13 * * *'
   workflow_run:
-    workflows: ["Deploy WashRadar to GitHub Pages"]
+    workflows: ["Deploy WashRadar to Cloudflare Pages"]
     types: [completed]
   pull_request:
     paths:

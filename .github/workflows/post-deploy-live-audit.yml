@@ -2,7 +2,7 @@ name: Post-deploy production audit
 
 on:
   workflow_run:
-    workflows: ["Deploy WashRadar to GitHub Pages"]
+    workflows: ["Deploy WashRadar to Cloudflare Pages"]
     types: [completed]
   workflow_dispatch:
 
