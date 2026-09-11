@@ -92,6 +92,9 @@ jobs:
       - name: Run WashRadar synthetic user agent
         run: npx tsx scripts/synthetic-user-agent.ts
 
+      - name: Verify saved location survives refresh
+        run: npx tsx scripts/location-persistence-user-agent.ts
+
       - name: Verify map markers and Search this area
         run: npx tsx scripts/map-user-agent.ts
 
