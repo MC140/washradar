@@ -7,7 +7,9 @@ const selectSchema = z.object({
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
   clientId: z.string().uuid(),
-  limit: z.number().int().min(1).max(5).default(5),
+  // This is only a transport ceiling. The commercial max-visible inventory is enforced
+  // by Supabase per placement so a future 5 -> 8 decision does not require an app release.
+  limit: z.number().int().min(1).max(20).default(20),
   washId: z.string().uuid().optional(),
 });
 
