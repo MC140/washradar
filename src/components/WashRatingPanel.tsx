@@ -2,6 +2,7 @@ import {BadgeCheck, Star} from 'lucide-react';
 import {useEffect, useMemo, useState} from 'react';
 import {toast} from 'sonner';
 import {Modal} from './Modal';
+import {analytics} from '../services/analytics';
 import {
   WASH_RATING_TAGS,
   getWashRatingSummary,
@@ -65,8 +66,15 @@ export function WashRatingPanel({washId}: {washId: string}) {
     }
     setBusy(true);
     try {
+      const edited = Boolean(summary?.myRating);
       const next = await submitWashRating(washId, form);
       setSummary(next);
+      analytics.track('rating_submitted', {
+        washId,
+        overall: form.overall,
+        verifiedVisit: Boolean(next.myRating?.verifiedVisit),
+        edited,
+      });
       setOpen(false);
       toast.success(next.myRating?.verifiedVisit ? 'Rating saved · verified visit' : 'Rating saved. Thanks for helping other drivers.');
     } catch (error) {
