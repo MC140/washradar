@@ -9,6 +9,7 @@ import {supabaseClient} from './supabaseClient';
 const emptyMetrics: ContributionMetrics = {reportsSubmitted: 0, completedWaits: 0, reputation: 50, streakDays: 0};
 const supabaseRepository = new SupabaseRepository();
 const loadSupabaseMetrics = supabaseRepository.metrics.bind(supabaseRepository);
+const MAX_AD_REQUEST_LIMIT = 20;
 
 // A normal browser visitor has no Supabase auth session until they contribute or sign in.
 // Avoid sending an RPC that can only describe a contributor in that state; this removes
@@ -31,8 +32,8 @@ export const repository: WashRepository = appConfig.demoMode
     ? supabaseRepository
     : new UnavailableRepository();
 
-export async function getNearbyAds(placement: string, origin: Point, limit = 5, washId?: string): Promise<AdCreative[]> {
-  const safeLimit = Math.max(1, Math.min(5, Math.floor(limit || 5)));
+export async function getNearbyAds(placement: string, origin: Point, limit = MAX_AD_REQUEST_LIMIT, washId?: string): Promise<AdCreative[]> {
+  const safeLimit = Math.max(1, Math.min(MAX_AD_REQUEST_LIMIT, Math.floor(limit || MAX_AD_REQUEST_LIMIT)));
   if (repository.mode === 'supabase') return loadLocalAds(placement, origin, safeLimit, washId);
   if (repository.mode !== 'demo') return [];
 
