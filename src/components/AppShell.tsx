@@ -15,11 +15,8 @@ const mobileNavigation = [
   {to: '/profile', label: 'Profile', icon: User},
 ];
 
-const browsingLocationStorageKey = 'wr-manual-location-v1';
-const locationIntroStorageKey = 'wr-location-intro';
-
 export function AppShell() {
-  const {origin, locationLabel, locationReady, locate, alerts, refresh} = useWashRadar();
+  const {locationLabel, locationReady, locate, alerts, refresh} = useWashRadar();
   const communityAuth = useCommunityAuth();
   const [reportOpen, setReportOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
@@ -38,24 +35,6 @@ export function AppShell() {
     syncedAuth.current = communityAuth.signedIn;
     void refresh();
   }, [communityAuth.ready, communityAuth.signedIn, refresh]);
-
-  useEffect(() => {
-    if (!locationReady) return;
-    try {
-      const isFreshGps = locationLabel === 'Current location';
-      const point = isFreshGps
-        ? {lat: Math.round(origin.lat * 1_000) / 1_000, lng: Math.round(origin.lng * 1_000) / 1_000}
-        : origin;
-      localStorage.setItem(browsingLocationStorageKey, JSON.stringify({
-        label: isFreshGps ? 'Last location' : locationLabel,
-        point,
-      }));
-      localStorage.setItem(locationIntroStorageKey, 'seen');
-    } catch {
-      // Storage can be unavailable in hardened/private browser contexts. The current
-      // session still works; only reload persistence is skipped in that case.
-    }
-  }, [locationLabel, locationReady, origin]);
 
   return (
     <>
