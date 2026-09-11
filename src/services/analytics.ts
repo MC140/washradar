@@ -42,7 +42,12 @@ class AnalyticsService {
   }
 
   track(name: AnalyticsEvent, properties: Properties = {}) {
-    const detail: PendingEvent = {name, properties, at: new Date().toISOString()};
+    const trafficType = typeof navigator !== 'undefined' && navigator.webdriver ? 'synthetic' : 'user';
+    const detail: PendingEvent = {
+      name,
+      properties: {...properties, trafficType},
+      at: new Date().toISOString(),
+    };
     window.dispatchEvent(new CustomEvent('washradar:analytics', {detail}));
 
     if (appConfig.demoMode || !hasSupabaseConfiguration) return;
