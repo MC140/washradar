@@ -40,7 +40,6 @@ export function AccountAuth({compact = false}: Props) {
   const signInWithGoogle = async () => {
     setBusy(true);
     try {
-      analytics.track('auth_social_started', {method: 'google'});
       await signInWithSocial('google');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Google sign-in is unavailable.');
