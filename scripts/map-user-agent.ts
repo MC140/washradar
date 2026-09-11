@@ -2,6 +2,7 @@ import {chromium, devices} from '@playwright/test';
 
 const BASE_URL = (process.env.WASHRADAR_URL || 'https://washradar.ca').replace(/\/$/, '');
 const MISSISSAUGA = {latitude: 43.5837, longitude: -79.7591};
+const LOCATION_STORAGE_KEY = 'wr-selected-location-v2';
 
 async function main() {
   const browser = await chromium.launch({headless: true});
@@ -57,10 +58,10 @@ async function main() {
       await page.getByRole('button', {name: 'Close map preview'}).dispatchEvent('click');
     }
 
-    const before = await page.evaluate(() => {
-      const raw = localStorage.getItem('wr-manual-location-v1');
+    const before = await page.evaluate((key) => {
+      const raw = localStorage.getItem(key);
       return raw ? JSON.parse(raw) : null;
-    });
+    }, LOCATION_STORAGE_KEY);
 
     const box = await map.boundingBox();
     if (!box) throw new Error('Could not measure map for pan interaction');
@@ -76,11 +77,13 @@ async function main() {
     await searchArea.click();
 
     await page.getByRole('heading', {name: /Nearby washes/i}).waitFor({state: 'visible', timeout: 15_000});
-    const pinned = await page.evaluate(() => {
-      const raw = localStorage.getItem('wr-manual-location-v1');
+    const pinned = await page.evaluate((key) => {
+      const raw = localStorage.getItem(key);
       return raw ? JSON.parse(raw) : null;
-    });
-    if (!pinned || pinned.label !== 'Pinned map area') throw new Error('Search this area did not persist the pinned map origin');
+    }, LOCATION_STORAGE_KEY);
+    if (!pinned || pinned.label !== 'Pinned map area' || pinned.source !== 'map') {
+      throw new Error('Search this area did not persist the pinned map origin');
+    }
 
     const originalPoint = before?.point || {lat: MISSISSAUGA.latitude, lng: MISSISSAUGA.longitude};
     const moved = Math.abs(Number(pinned.point?.lat) - Number(originalPoint.lat)) + Math.abs(Number(pinned.point?.lng) - Number(originalPoint.lng));
@@ -88,11 +91,13 @@ async function main() {
 
     await page.reload({waitUntil: 'domcontentloaded'});
     await page.getByRole('heading', {name: /Nearby washes/i}).waitFor({state: 'visible', timeout: 15_000});
-    const persisted = await page.evaluate(() => {
-      const raw = localStorage.getItem('wr-manual-location-v1');
+    const persisted = await page.evaluate((key) => {
+      const raw = localStorage.getItem(key);
       return raw ? JSON.parse(raw) : null;
-    });
-    if (!persisted || persisted.label !== 'Pinned map area') throw new Error('Pinned map origin did not survive reload');
+    }, LOCATION_STORAGE_KEY);
+    if (!persisted || persisted.label !== 'Pinned map area' || persisted.source !== 'map') {
+      throw new Error('Pinned map origin did not survive reload');
+    }
 
     console.log(JSON.stringify({
       ok: true,

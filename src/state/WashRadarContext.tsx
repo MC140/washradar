@@ -19,6 +19,13 @@ import {repository} from '../services';
 import {requestLocation} from '../services/location';
 import type {ContributionMetrics} from '../services/repository';
 import {loadQueueSignals} from '../services/scaleRefresh';
+import {
+  browsingPointForGps,
+  readStoredLocation,
+  restoredLocationLabel,
+  writeStoredLocation,
+  type StoredLocation,
+} from './locationPersistence';
 
 type State = {
   mode: typeof repository.mode;
@@ -54,12 +61,9 @@ type State = {
   signOut: () => Promise<void>;
 };
 
-type StoredManualLocation = {label: string; point: Point};
-
 const Context = createContext<State | null>(null);
 const initialMetrics = {reportsSubmitted: 0, completedWaits: 0, reputation: 50, streakDays: 0};
 const neutralOrigin: Point = {lat: 43.6532, lng: -79.3832};
-const manualLocationStorageKey = 'wr-manual-location-v1';
 const sortStorageKey = 'wr-sort-v1';
 const supportedSortModes: SortMode[] = ['Recommended', 'Fastest Total Time', 'Shortest Queue', 'Nearest', 'Lowest Price'];
 
@@ -76,25 +80,17 @@ function storedFilters(): WashFilters {
   }
 }
 
-function storedManualLocation(): StoredManualLocation | null {
+function storedSelectedLocation(): StoredLocation | null {
+  if (!hasStorage()) return null;
+  return readStoredLocation(localStorage);
+}
+
+function persistSelectedLocation(location: StoredLocation) {
+  if (!hasStorage()) return;
   try {
-    if (!hasStorage()) return null;
-    const stored = localStorage.getItem(manualLocationStorageKey);
-    if (!stored) return null;
-    const parsed = JSON.parse(stored) as Partial<StoredManualLocation>;
-    const label = typeof parsed.label === 'string' ? parsed.label.trim() : '';
-    const lat = parsed.point?.lat;
-    const lng = parsed.point?.lng;
-    if (
-      !label || typeof lat !== 'number' || typeof lng !== 'number' ||
-      !Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180
-    ) {
-      localStorage.removeItem(manualLocationStorageKey);
-      return null;
-    }
-    return {label: label.slice(0, 160), point: {lat, lng}};
+    writeStoredLocation(localStorage, location);
   } catch {
-    return null;
+    // Browsing should continue even if storage is blocked or full.
   }
 }
 
@@ -109,11 +105,11 @@ function storedSort(): SortMode {
 }
 
 export function WashRadarProvider({children}: {children: ReactNode}) {
-  const [restoredManualLocation] = useState(storedManualLocation);
-  const [origin, setOrigin] = useState<Point>(() => restoredManualLocation?.point ?? neutralOrigin);
+  const [restoredLocation] = useState(storedSelectedLocation);
+  const [origin, setOrigin] = useState<Point>(() => restoredLocation?.point ?? neutralOrigin);
   const [currentPosition, setCurrentPosition] = useState<Point>();
-  const [locationLabel, setLocationLabel] = useState(() => restoredManualLocation?.label ?? 'Set location');
-  const [locationReady, setLocationReady] = useState(() => Boolean(restoredManualLocation));
+  const [locationLabel, setLocationLabel] = useState(() => restoredLocation ? restoredLocationLabel(restoredLocation) : 'Set location');
+  const [locationReady, setLocationReady] = useState(() => Boolean(restoredLocation));
   const [washes, setWashes] = useState<RankedWash[]>([]);
   const [signals, setSignals] = useState<QueueSignal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -277,7 +273,12 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
   const locate = useCallback(async () => {
     try {
       const result = await requestLocation();
-      if (hasStorage()) localStorage.removeItem(manualLocationStorageKey);
+      persistSelectedLocation({
+        label: 'Current location',
+        point: browsingPointForGps(result.point),
+        source: 'gps',
+        savedAt: new Date().toISOString(),
+      });
       setCurrentPosition(result.point);
       setOrigin(result.point);
       setLocationLabel('Current location');
@@ -297,10 +298,7 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
     analytics.track('search', {hasResult: Boolean(point)});
     if (!point) return false;
     const label = query.trim();
-    if (hasStorage()) {
-      const storedLocation: StoredManualLocation = {label, point};
-      localStorage.setItem(manualLocationStorageKey, JSON.stringify(storedLocation));
-    }
+    persistSelectedLocation({label, point, source: 'manual', savedAt: new Date().toISOString()});
     setCurrentPosition(undefined);
     setOrigin(point);
     setLocationLabel(label);
@@ -312,10 +310,7 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
   const exploreAt = useCallback((point: Point) => {
     if (!Number.isFinite(point.lat) || !Number.isFinite(point.lng) || Math.abs(point.lat) > 90 || Math.abs(point.lng) > 180) return;
     const label = 'Pinned map area';
-    if (hasStorage()) {
-      const storedLocation: StoredManualLocation = {label, point};
-      localStorage.setItem(manualLocationStorageKey, JSON.stringify(storedLocation));
-    }
+    persistSelectedLocation({label, point, source: 'map', savedAt: new Date().toISOString()});
     setCurrentPosition(undefined);
     setOrigin(point);
     setLocationLabel(label);
