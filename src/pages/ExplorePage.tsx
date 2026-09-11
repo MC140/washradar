@@ -9,7 +9,7 @@ import {WashCard} from '../components/WashCard';
 import {Modal} from '../components/Modal';
 import {NearbyOffer} from '../components/NearbyOffer';
 import {ReportModal} from '../components/ReportModal';
-import {repository} from '../services';
+import {getNearbyAds} from '../services';
 
 const MapView = lazy(() => import('../components/MapView').then((module) => ({default: module.MapView})));
 const baseSortOptions: SortMode[] = ['Recommended', 'Shortest Queue', 'Nearest', 'Lowest Price'];
@@ -37,7 +37,7 @@ export function ExplorePage() {
   const [searchMessage, setSearchMessage] = useState('');
   const [selectedMapWash, setSelectedMapWash] = useState<RankedWash>();
   const [reportingWash, setReportingWash] = useState<RankedWash>();
-  const [ad, setAd] = useState<AdCreative | null>(null);
+  const [ads, setAds] = useState<AdCreative[]>([]);
   const [locationPrompt, setLocationPrompt] = useState(() => localStorage.getItem('wr-location-intro') !== 'seen');
 
   const typeCounts = useMemo(() => {
@@ -96,11 +96,11 @@ export function ExplorePage() {
 
   useEffect(() => {
     if (!locationReady) {
-      setAd(null);
+      setAds([]);
       return;
     }
     let cancelled = false;
-    void repository.getAd('explore_nearby_offer', origin).then((creative) => !cancelled && setAd(creative));
+    void getNearbyAds('explore_nearby_offer', origin, 5).then((creatives) => !cancelled && setAds(creatives));
     return () => { cancelled = true; };
   }, [locationReady, origin]);
 
@@ -166,7 +166,15 @@ export function ExplorePage() {
         </>
       ) : !loading && <EmptyState locationReady={locationReady} onLocate={locate} onReset={() => setFilters({...filters, types: [], maximumDistanceKm: 50, maximumPrice: 50, queueUnderMinutes: null, openNow: false})} />}
 
-      {ad && <NearbyOffer ad={ad} placement="explore_nearby_offer" />}
+      {ads.length > 0 && <section className="nearby-offers-section" aria-label="Sponsored businesses near your selected area">
+        <div className="nearby-offers-heading">
+          <div><p className="eyebrow">NEARBY SPONSORS</p><h2>Local offers around this area</h2></div>
+          <span>{ads.length} sponsored {ads.length === 1 ? 'business' : 'businesses'} · based on your selected location</span>
+        </div>
+        <div className="nearby-offers-grid">
+          {ads.map((ad) => <NearbyOffer key={ad.id} ad={ad} placement="explore_nearby_offer" />)}
+        </div>
+      </section>}
 
       {locationReady && <div className="results-bar results-bar-v2">
         <h2>Nearby washes <span>{filtered.length}</span></h2>
