@@ -14,6 +14,10 @@ export type AnalyticsEvent =
   | 'queue_session_completed'
   | 'favourite'
   | 'alert_created'
+  | 'rating_submitted'
+  | 'auth_signed_in'
+  | 'account_created'
+  | 'support_viewed'
   | 'ad_impression'
   | 'ad_click';
 

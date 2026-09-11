@@ -1,6 +1,7 @@
 import {KeyRound, Mail, ShieldCheck} from 'lucide-react';
 import {useState, type FormEvent} from 'react';
 import {toast} from 'sonner';
+import {analytics} from '../services/analytics';
 import {
   signInWithPassword,
   signUpWithPassword,
@@ -22,12 +23,14 @@ export function AccountAuth({compact = false}: Props) {
     try {
       if (mode === 'signin') {
         await signInWithPassword(email, password);
+        analytics.track('auth_signed_in', {method: 'password'});
         toast.success('Signed in to WashRadar.');
       } else {
         const result = await signUpWithPassword(email, password);
         if (result.confirmationRequired) {
           toast.error('Email verification is still enabled for this beta, but public email delivery is not configured yet. Please try again after the beta auth setting is updated.');
         } else {
+          analytics.track('account_created', {method: 'password'});
           toast.success('WashRadar account created. You’re signed in.');
         }
       }
