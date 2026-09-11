@@ -1,4 +1,6 @@
+import {useEffect} from 'react';
 import {appConfig} from '../config/env';
+import {analytics} from '../services/analytics';
 
 const pages = {
   privacy: {
@@ -53,5 +55,10 @@ const pages = {
 
 export function LegalPage({page}: {page: keyof typeof pages}) {
   const content = pages[page];
+
+  useEffect(() => {
+    if (page === 'support') analytics.track('support_viewed');
+  }, [page]);
+
   return <article className="legal-page"><p className="eyebrow">WASHRADAR TRUST CENTRE</p><h1>{content.title}</h1><p className="legal-lead">{content.lead}</p><p className="legal-date">Effective September 10, 2026</p>{content.sections.map(([title, body]) => <section key={title}><h2>{title}</h2><p>{body}</p></section>)}</article>;
 }
