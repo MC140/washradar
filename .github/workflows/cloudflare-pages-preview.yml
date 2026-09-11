@@ -14,8 +14,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-deploy:
+  build-deploy-and-validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      WASHRADAR_URL: https://cloudflare-preview.washradar.pages.dev
     steps:
       - uses: actions/checkout@v4
 
@@ -38,7 +41,7 @@ jobs:
           python3 - <<'PY'
           import json
           data=json.load(open('public/postal-index.json', encoding='utf-8'))
-          keys={row[0] for row in data.get('areas', [])}
+          keys={str(row[0]).lower() for row in data.get('areas', [])}
           assert 'm1x' in keys, 'M1X missing from postal index'
           assert len(keys) >= 100, f'postal index unexpectedly small: {len(keys)}'
           print(f'Postal index validated: {len(keys)} FSAs; M1X present')
@@ -87,12 +90,15 @@ jobs:
         env:
           VITE_DEMO_MODE: "false"
           VITE_BASE_PATH: "/"
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
           VITE_GOOGLE_MAPS_BROWSER_KEY: ${{ secrets.VITE_GOOGLE_MAPS_BROWSER_KEY }}
-          VITE_SUPPORT_EMAIL: ${{ vars.VITE_SUPPORT_EMAIL }}
-          VITE_MAP_TILE_URL: ${{ vars.VITE_MAP_TILE_URL }}
-          VITE_MAP_ATTRIBUTION: ${{ vars.VITE_MAP_ATTRIBUTION }}
+          VITE_SUPPORT_EMAIL: support@washradar.ca
+          VITE_MAP_TILE_URL: https://tile.openstreetmap.org/{z}/{x}/{y}.png
+          VITE_MAP_ATTRIBUTION: © OpenStreetMap contributors
+          VITE_QUEUE_REFRESH_MODE: poll
+          VITE_QUEUE_POLL_MS: "20000"
+
+      - name: Remove GitHub Pages-only CNAME artifact
+        run: rm -f dist/CNAME
 
       - name: Ensure Cloudflare Pages project exists
         env:
@@ -130,3 +136,61 @@ jobs:
             --branch=cloudflare-preview \
             --commit-hash="${GITHUB_SHA}" \
             --commit-message="Cloudflare Pages preview from GitHub Actions"
+
+      - name: Wait for Cloudflare preview and verify static search assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..30}; do
+            if curl --fail --silent --show-error --location "$WASHRADAR_URL/" >/dev/null; then
+              break
+            fi
+            if [ "$attempt" = 30 ]; then
+              echo "Cloudflare preview did not become reachable in time."
+              exit 1
+            fi
+            sleep 2
+          done
+          curl --fail --silent --show-error --location "$WASHRADAR_URL/postal-index.json" --output /tmp/postal-index.json
+          curl --fail --silent --show-error --location "$WASHRADAR_URL/address-index/areas.json" --output /tmp/address-areas.json
+          python3 - <<'PY'
+          import json
+          postal=json.load(open('/tmp/postal-index.json', encoding='utf-8'))
+          keys={str(row[0]).lower() for row in postal.get('areas', [])}
+          assert 'm1x' in keys, 'Cloudflare preview postal index is missing M1X'
+          areas=json.load(open('/tmp/address-areas.json', encoding='utf-8'))
+          assert areas, 'Cloudflare preview address-area index is empty'
+          print(f'Cloudflare static indexes healthy: {len(keys)} postal FSAs')
+          PY
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run WashRadar synthetic user agent against Cloudflare
+        run: npx tsx scripts/synthetic-user-agent.ts
+
+      - name: Verify saved location survives refresh on Cloudflare
+        run: npx tsx scripts/location-persistence-user-agent.ts
+
+      - name: Verify map markers and Search this area on Cloudflare
+        run: npx tsx scripts/map-user-agent.ts
+
+      - name: Verify structured WashRadar ratings on Cloudflare
+        run: npx tsx scripts/ratings-user-agent.ts
+
+      - name: Add report to workflow summary
+        if: always()
+        shell: bash
+        run: |
+          if [ -f synthetic-user-results/report.md ]; then
+            cat synthetic-user-results/report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload screenshots and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudflare-preview-synthetic-report-${{ github.run_id }}
+          path: synthetic-user-results
+          if-no-files-found: warn
+          retention-days: 14
