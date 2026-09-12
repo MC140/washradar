@@ -29,7 +29,14 @@ export function AppShell() {
     const teaserKey = 'washradar-app-coming-soon-teaser-seen';
     if (window.sessionStorage.getItem(teaserKey) === '1') return;
     window.sessionStorage.setItem(teaserKey, '1');
-    toast('Use WashRadar now · App coming soon', {duration: 5000, id: 'app-coming-soon'});
+    toast('WashRadar on the web · App coming soon', {
+      duration: 5000,
+      id: 'app-coming-soon',
+      action: {
+        label: '×',
+        onClick: () => toast.dismiss('app-coming-soon'),
+      },
+    });
   }, []);
 
   useEffect(() => {
