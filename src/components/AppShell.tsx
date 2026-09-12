@@ -1,6 +1,7 @@
 import {Bell, Compass, Heart, MapPin, Plus, Radar, Trophy, User} from 'lucide-react';
 import {useEffect, useRef, useState} from 'react';
 import {Link, NavLink, Outlet} from 'react-router-dom';
+import {toast} from 'sonner';
 import {useCommunityAuth} from '../state/useCommunityAuth';
 import {useWashRadar} from '../state/WashRadarContext';
 import {ProfileDrawer} from './ProfileDrawer';
@@ -23,6 +24,13 @@ export function AppShell() {
   const [updateReady, setUpdateReady] = useState(false);
   const syncedAuth = useRef<boolean | null>(null);
   const hasTriggeredAlert = alerts.some((entry) => Boolean(entry.triggeredAt));
+
+  useEffect(() => {
+    const teaserKey = 'washradar-app-coming-soon-teaser-seen';
+    if (window.sessionStorage.getItem(teaserKey) === '1') return;
+    window.sessionStorage.setItem(teaserKey, '1');
+    toast('Use WashRadar now · App coming soon', {duration: 5000, id: 'app-coming-soon'});
+  }, []);
 
   useEffect(() => {
     const ready = () => setUpdateReady(true);
@@ -56,7 +64,7 @@ export function AppShell() {
       {updateReady && <div className="update-banner" role="status">A fresh version is ready.<button onClick={() => window.location.reload()}>Update</button></div>}
       <main id="main-content" className="app-main"><Outlet /></main>
       <footer className="site-footer">
-        <div><strong>WashRadar</strong><span>Good timing. Great shine.</span><small>Use WashRadar now · App coming soon</small></div>
+        <div><strong>WashRadar</strong><span>Good timing. Great shine.</span></div>
         <nav aria-label="Legal">
           <Link to="/privacy">Privacy</Link>
           <Link to="/terms">Terms</Link>
