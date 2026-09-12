@@ -1,4 +1,4 @@
-import {BrowserRouter, Route, Routes} from 'react-router-dom';
+import {BrowserRouter, Navigate, Route, Routes} from 'react-router-dom';
 import {Toaster} from 'sonner';
 import {appConfig} from './config/env';
 import {AppShell} from './components/AppShell';
@@ -25,6 +25,7 @@ function basename() {
 export default function App() {
   return <BrowserRouter basename={basename()}><WashRadarProvider><Toaster position="top-center" richColors /><Routes><Route element={<AppShell />}>
     <Route index element={<ExplorePage />} />
+    <Route path="go" element={<Navigate to="/" replace />} />
     <Route path="wash/:id" element={<WashDetailsPage />} />
     <Route path="saved" element={<SavedPage />} />
     <Route path="alerts" element={<AlertsPage />} />
