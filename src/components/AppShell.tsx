@@ -56,7 +56,7 @@ export function AppShell() {
       {updateReady && <div className="update-banner" role="status">A fresh version is ready.<button onClick={() => window.location.reload()}>Update</button></div>}
       <main id="main-content" className="app-main"><Outlet /></main>
       <footer className="site-footer">
-        <div><strong>WashRadar</strong><span>Good timing. Great shine.</span></div>
+        <div><strong>WashRadar</strong><span>Good timing. Great shine.</span><small>Use WashRadar now · App coming soon</small></div>
         <nav aria-label="Legal">
           <Link to="/privacy">Privacy</Link>
           <Link to="/terms">Terms</Link>
