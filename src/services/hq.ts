@@ -28,6 +28,20 @@ export interface HqTask {
   completed_at: string | null;
 }
 
+export interface HqAgentResult {
+  summary: string;
+  findings?: string[];
+  deliverables?: string[];
+  recommendation?: string;
+  metrics?: Record<string, unknown>;
+  prospects?: Array<Record<string, unknown>>;
+  approval?: {
+    actionType: string;
+    summary: string;
+    payload: Record<string, unknown>;
+  };
+}
+
 export interface HqRun {
   id: string;
   agent_key: string;
@@ -36,7 +50,7 @@ export interface HqRun {
   mode: string;
   status: string;
   summary: string;
-  output: Record<string, unknown>;
+  output: HqAgentResult & Record<string, unknown>;
   started_at: string;
   completed_at: string | null;
 }
@@ -89,6 +103,7 @@ export interface HqGithub {
   draftPullRequests: number;
   staleDraftPullRequests: {number: number; title: string; updatedAt: string}[];
   recentFailedRuns: {id: number; name: string; branch: string; updatedAt: string; url: string}[];
+  recentSuccessfulRuns?: {id: number; name: string; branch: string; updatedAt: string; url: string}[];
 }
 
 export interface HqSnapshot {
@@ -100,6 +115,15 @@ export interface HqSnapshot {
   runs: HqRun[];
   operational: HqOperational;
   github: HqGithub;
+}
+
+export interface HqExecutionSummary {
+  processed: number;
+  completed: number;
+  waitingApproval: number;
+  blocked: number;
+  executions: Array<Record<string, unknown>>;
+  chiefBriefs: Array<Record<string, unknown>>;
 }
 
 async function invoke<T>(body: Record<string, unknown>): Promise<T> {
@@ -114,11 +138,15 @@ export function loadHqSnapshot() {
 }
 
 export function runHqScan() {
-  return invoke<{operational: HqOperational; github: HqGithub; createdTasks: string[]}>({action: 'hq-run-scan'});
+  return invoke<{operational: HqOperational; github: HqGithub; createdTasks: string[]; execution: HqExecutionSummary}>({action: 'hq-run-scan'});
+}
+
+export function runHqCompany() {
+  return invoke<HqExecutionSummary>({action: 'hq-run-company'});
 }
 
 export function planHqGoal(goal: string) {
-  return invoke<{planId: string; tasks: HqTask[]}>({action: 'hq-plan-goal', goal});
+  return invoke<{planId: string; tasks: HqTask[]; execution: HqExecutionSummary}>({action: 'hq-plan-goal', goal});
 }
 
 export function createHqTask(input: {
@@ -128,7 +156,7 @@ export function createHqTask(input: {
   priority?: HqPriority;
   approvalRequired?: boolean;
 }) {
-  return invoke<{task: HqTask}>({
+  return invoke<{task: HqTask; execution?: HqExecutionSummary}>({
     action: 'hq-create-task',
     title: input.title,
     detail: input.detail ?? '',

@@ -26,10 +26,12 @@ import {
   loadHqSnapshot,
   planHqGoal,
   reviewHqApproval,
+  runHqCompany,
   runHqScan,
   updateHqTask,
   type HqAgent,
   type HqPriority,
+  type HqRun,
   type HqSnapshot,
   type HqTask,
 } from '../services/hq';
@@ -68,7 +70,7 @@ export function HQPage() {
   const [busy, setBusy] = useState('');
   const [goal, setGoal] = useState('');
   const [taskTitle, setTaskTitle] = useState('');
-  const [taskAgent, setTaskAgent] = useState('chief');
+  const [taskAgent, setTaskAgent] = useState('product');
 
   const load = useCallback(async () => {
     try {
@@ -84,6 +86,10 @@ export function HQPage() {
   const activeTasks = useMemo(() => (snapshot?.tasks ?? [])
     .filter((task) => task.status !== 'done')
     .sort((a, b) => priorityRank[b.priority] - priorityRank[a.priority] || new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()), [snapshot]);
+
+  const recentTasks = useMemo(() => [...(snapshot?.tasks ?? [])]
+    .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+    .slice(0, 24), [snapshot]);
 
   const pendingApprovals = (snapshot?.approvals ?? []).filter((item) => item.status === 'pending');
   const ops = snapshot?.operational ?? {};
@@ -115,7 +121,7 @@ export function HQPage() {
     await execute('goal', async () => {
       await planHqGoal(clean);
       setGoal('');
-    }, 'Chief of Staff created a coordinated plan.');
+    }, 'Plan created and specialist agents completed their work.');
   };
 
   const submitTask = async (event: FormEvent) => {
@@ -125,7 +131,7 @@ export function HQPage() {
     await execute('task', async () => {
       await createHqTask({title: clean, agentKey: taskAgent, priority: 'normal'});
       setTaskTitle('');
-    }, 'Task added to HQ.');
+    }, 'Task assigned and the agent picked it up.');
   };
 
   if (error) {
@@ -150,12 +156,13 @@ export function HQPage() {
       <div>
         <p className="eyebrow">FOUNDER CONTROL CENTRE</p>
         <h1>WashRadar HQ</h1>
-        <p>Six operating agents, one shared brain, founder approval for consequential actions.</p>
+        <p>Assign a goal once. The specialist agents now pick up the work, produce results, write to the Brain and stop at approval gates.</p>
       </div>
       <div className="hq-top-actions">
         <span className="hq-zero"><CircleDollarSign size={17} /> ZERO-COST MODE · $0</span>
         <button className="secondary-button" disabled={Boolean(busy)} onClick={() => void load()}><RefreshCcw size={16} /> Refresh</button>
-        <button className="primary-button" disabled={Boolean(busy)} onClick={() => void execute('scan', runHqScan, 'All six agents completed a live health scan.')}><Activity size={16} /> {busy === 'scan' ? 'Scanning…' : 'Run company scan'}</button>
+        <button className="secondary-button" disabled={Boolean(busy)} onClick={() => void execute('agents', runHqCompany, 'Queued agents finished their available work.')}><Play size={16} /> {busy === 'agents' ? 'Agents working…' : 'Run agents'}</button>
+        <button className="primary-button" disabled={Boolean(busy)} onClick={() => void execute('scan', runHqScan, 'Company scan completed and follow-up work was executed.')}><Activity size={16} /> {busy === 'scan' ? 'Scanning & working…' : 'Scan & work'}</button>
       </div>
     </div>
 
@@ -172,17 +179,17 @@ export function HQPage() {
       <form className="hq-command-card hq-goal-card" onSubmit={(event) => void submitGoal(event)}>
         <div className="hq-section-title"><Sparkles size={20} /><div><p className="eyebrow">CHIEF OF STAFF</p><h2>Give the company a goal</h2></div></div>
         <textarea value={goal} onChange={(event) => setGoal(event.target.value)} placeholder="Example: Get WashRadar ready for a Scarborough public launch with trustworthy queue data and a partner outreach plan." maxLength={1200} />
-        <div className="hq-form-row"><small>HQ creates coordinated work across Product, Engineering, Data, Growth and Operations.</small><button className="primary-button" disabled={busy === 'goal' || goal.trim().length < 8}>{busy === 'goal' ? 'Planning…' : 'Plan & assign'}</button></div>
+        <div className="hq-form-row"><small>Plan & assign now also runs Product, Engineering, Data, Growth and Operations. Results appear below automatically.</small><button className="primary-button" disabled={busy === 'goal' || goal.trim().length < 8}>{busy === 'goal' ? 'Planning & running…' : 'Plan, assign & run'}</button></div>
       </form>
 
       <form className="hq-command-card" onSubmit={(event) => void submitTask(event)}>
-        <div className="hq-section-title"><ClipboardCheck size={20} /><div><p className="eyebrow">QUICK ASSIGN</p><h2>Add a task</h2></div></div>
+        <div className="hq-section-title"><ClipboardCheck size={20} /><div><p className="eyebrow">QUICK ASSIGN</p><h2>Give an agent a task</h2></div></div>
         <input value={taskTitle} onChange={(event) => setTaskTitle(event.target.value)} placeholder="What needs to be done?" maxLength={180} />
         <div className="hq-form-row">
           <select value={taskAgent} onChange={(event) => setTaskAgent(event.target.value)}>
-            {snapshot.agents.map((agent) => <option key={agent.key} value={agent.key}>{agent.name}</option>)}
+            {snapshot.agents.filter((agent) => agent.key !== 'chief').map((agent) => <option key={agent.key} value={agent.key}>{agent.name}</option>)}
           </select>
-          <button className="secondary-button" disabled={busy === 'task' || taskTitle.trim().length < 3}>Assign</button>
+          <button className="secondary-button" disabled={busy === 'task' || taskTitle.trim().length < 3}>{busy === 'task' ? 'Working…' : 'Assign & run'}</button>
         </div>
       </form>
     </div>
@@ -200,8 +207,8 @@ export function HQPage() {
           <p className="eyebrow">THE BRAIN</p>
           <h3>Shared WashRadar memory</h3>
           <strong>{snapshot.memory.length}</strong>
-          <span>recent decisions & observations</span>
-          <small>Production data + HQ tasks + agent runs + founder decisions</small>
+          <span>recent decisions, goals & work products</span>
+          <small>Every completed agent task writes its findings and recommendation here.</small>
         </article>
         {snapshot.agents.slice(3).map((agent) => <AgentCard key={agent.key} agent={agent} snapshot={snapshot} />)}
       </div>
@@ -210,12 +217,19 @@ export function HQPage() {
     <div className="hq-lower-grid">
       <section className="hq-panel hq-work-panel">
         <div className="hq-section-heading">
-          <div><p className="eyebrow">WORK QUEUE</p><h2>What the company is doing</h2></div>
-          <span>{activeTasks.length} active</span>
+          <div><p className="eyebrow">COMPANY WORK & RESULTS</p><h2>What the agents did</h2></div>
+          <span>{activeTasks.length} active · {recentTasks.filter((task) => task.status === 'done').length} recent complete</span>
         </div>
         <div className="hq-task-list">
-          {activeTasks.length === 0 && <div className="hq-empty"><CheckCircle2 size={24} /><p>No active tasks. Run a company scan or give HQ a goal.</p></div>}
-          {activeTasks.slice(0, 16).map((task) => <TaskRow key={task.id} task={task} agents={snapshot.agents} busy={busy} onUpdate={(status) => execute(`task-${task.id}`, () => updateHqTask(task.id, {status}), status === 'done' ? 'Task completed.' : 'Task updated.')} />)}
+          {recentTasks.length === 0 && <div className="hq-empty"><CheckCircle2 size={24} /><p>No company work yet. Give HQ a goal or run a company scan.</p></div>}
+          {recentTasks.map((task) => <TaskRow
+            key={task.id}
+            task={task}
+            agents={snapshot.agents}
+            run={snapshot.runs.find((item) => item.task_id === task.id && item.run_type === 'task_execution')}
+            busy={busy}
+            onUpdate={(status) => execute(`task-${task.id}`, () => updateHqTask(task.id, {status}), status === 'done' ? 'Task completed.' : 'Task updated.')}
+          />)}
         </div>
       </section>
 
@@ -223,17 +237,18 @@ export function HQPage() {
         <section className="hq-panel">
           <div className="hq-section-heading"><div><p className="eyebrow">APPROVAL CENTRE</p><h2>Needs you</h2></div><span>{pendingApprovals.length}</span></div>
           {pendingApprovals.length === 0 ? <div className="hq-empty compact"><ShieldCheck size={22} /><p>No actions are waiting for approval.</p></div> :
-            pendingApprovals.slice(0, 6).map((approval) => <article className="hq-approval" key={approval.id}>
+            pendingApprovals.slice(0, 8).map((approval) => <article className="hq-approval" key={approval.id}>
               <strong>{approval.summary}</strong>
-              <small>{approval.action_type} · {timeAgo(approval.requested_at)}</small>
-              <div><button className="secondary-button" onClick={() => void execute(`reject-${approval.id}`, () => reviewHqApproval(approval.id, 'rejected'), 'Action rejected.')}>Reject</button><button className="primary-button" onClick={() => void execute(`approve-${approval.id}`, () => reviewHqApproval(approval.id, 'approved'), 'Action approved.')}>Approve</button></div>
+              <small>{approval.action_type.replaceAll('_', ' ')} · {timeAgo(approval.requested_at)}</small>
+              {Array.isArray(approval.payload?.prospects) && <details className="hq-approval-details"><summary>Preview shortlist</summary><ol>{(approval.payload.prospects as Array<Record<string, unknown>>).slice(0, 10).map((item, index) => <li key={String(item.washId ?? index)}><b>{String(item.name ?? 'Prospect')}</b>{item.city ? ` · ${String(item.city)}` : ''}{item.ratingCount ? ` · ${String(item.ratingCount)} ratings` : ''}</li>)}</ol></details>}
+              <div><button className="secondary-button" onClick={() => void execute(`reject-${approval.id}`, () => reviewHqApproval(approval.id, 'rejected'), 'Package rejected; HQ recorded your decision.')}>Reject</button><button className="primary-button" onClick={() => void execute(`approve-${approval.id}`, () => reviewHqApproval(approval.id, 'approved'), 'Package approved. No external message was sent.')}>Approve</button></div>
             </article>)}
         </section>
 
         <section className="hq-panel">
           <div className="hq-section-heading"><div><p className="eyebrow">SHARED MEMORY</p><h2>What HQ remembers</h2></div></div>
           <div className="hq-memory-list">
-            {snapshot.memory.slice(0, 6).map((item) => <article key={item.id}><span>{item.category}</span><strong>{item.title}</strong><p>{item.body}</p><small>{timeAgo(item.created_at)} · {item.source}</small></article>)}
+            {snapshot.memory.slice(0, 10).map((item) => <article key={item.id}><span>{item.category.replaceAll('_', ' ')}</span><strong>{item.title}</strong><p>{item.body}</p><small>{timeAgo(item.created_at)} · {item.source.replaceAll('_', ' ')}</small></article>)}
           </div>
         </section>
       </div>
@@ -241,7 +256,7 @@ export function HQPage() {
 
     <footer className="hq-footer-note">
       <ShieldCheck size={17} />
-      <span>Month 1 safeguard: paid AI is disabled. External emails, production changes, spending, contracts and other consequential actions are not autonomous.</span>
+      <span>Month 1 safeguard: agents may analyze, plan and prepare work automatically. External messages, spending, contracts and paid data refreshes remain disabled or founder-gated.</span>
       <Link to="/admin">Admin tools</Link>
     </footer>
   </section>;
@@ -268,15 +283,30 @@ function AgentCard({agent, snapshot}: {agent: HqAgent; snapshot: HqSnapshot}) {
   </article>;
 }
 
-function TaskRow({task, agents, busy, onUpdate}: {task: HqTask; agents: HqAgent[]; busy: string; onUpdate: (status: 'in_progress' | 'done' | 'blocked') => Promise<void>}) {
+function TaskRow({task, agents, run, busy, onUpdate}: {task: HqTask; agents: HqAgent[]; run?: HqRun; busy: string; onUpdate: (status: 'in_progress' | 'done' | 'blocked') => Promise<void>}) {
   const owner = agents.find((agent) => agent.key === task.agent_key)?.name ?? 'Unassigned';
-  return <article className="hq-task-row">
+  const findings = Array.isArray(run?.output?.findings) ? run.output.findings : [];
+  const deliverables = Array.isArray(run?.output?.deliverables) ? run.output.deliverables : [];
+  const prospects = Array.isArray(run?.output?.prospects) ? run.output.prospects : [];
+
+  return <article className={`hq-task-row hq-task-${task.status}`}>
     <span className={`hq-priority ${task.priority}`}>{task.priority}</span>
-    <div className="hq-task-copy"><strong>{task.title}</strong><p>{task.detail}</p><small>{owner} · {task.status.replaceAll('_', ' ')} · {timeAgo(task.updated_at)}</small></div>
+    <div className="hq-task-copy">
+      <div className="hq-task-title-line"><strong>{task.title}</strong><span className={`hq-task-status ${task.status}`}>{task.status.replaceAll('_', ' ')}</span></div>
+      <p>{run?.summary ?? task.detail}</p>
+      <small>{owner} · {timeAgo(run?.completed_at ?? task.updated_at)}</small>
+      {run && <details className="hq-result">
+        <summary>View agent result</summary>
+        {findings.length > 0 && <div><b>Findings</b><ul>{findings.map((item, index) => <li key={index}>{item}</li>)}</ul></div>}
+        {deliverables.length > 0 && <div><b>Deliverables</b><ul>{deliverables.map((item, index) => <li key={index}>{item}</li>)}</ul></div>}
+        {prospects.length > 0 && <div><b>Prospect shortlist</b><ol>{prospects.slice(0, 10).map((item, index) => <li key={String(item.washId ?? index)}>{String(item.name ?? 'Prospect')}{item.city ? ` · ${String(item.city)}` : ''}{item.ratingCount ? ` · ${String(item.ratingCount)} ratings` : ''}</li>)}</ol></div>}
+        {run.output?.recommendation && <div className="hq-recommendation"><b>Recommendation</b><p>{String(run.output.recommendation)}</p></div>}
+      </details>}
+    </div>
     <div className="hq-task-actions">
-      {task.status !== 'in_progress' && <button disabled={busy === `task-${task.id}`} onClick={() => void onUpdate('in_progress')}><Play size={14} /> Start</button>}
-      {task.status !== 'blocked' && <button disabled={busy === `task-${task.id}`} onClick={() => void onUpdate('blocked')}>Block</button>}
-      <button className="done" disabled={busy === `task-${task.id}`} onClick={() => void onUpdate('done')}><CheckCircle2 size={14} /> Done</button>
+      {task.status === 'queued' && <button disabled={busy === `task-${task.id}`} onClick={() => void onUpdate('in_progress')}><Play size={14} /> Start</button>}
+      {task.status !== 'done' && task.status !== 'waiting_approval' && <button disabled={busy === `task-${task.id}`} onClick={() => void onUpdate('blocked')}>Block</button>}
+      {task.status !== 'done' && task.status !== 'waiting_approval' && <button className="done" disabled={busy === `task-${task.id}`} onClick={() => void onUpdate('done')}><CheckCircle2 size={14} /> Done</button>}
     </div>
   </article>;
 }
