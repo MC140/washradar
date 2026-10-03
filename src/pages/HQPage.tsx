@@ -70,7 +70,7 @@ export function HQPage() {
   const [busy, setBusy] = useState('');
   const [goal, setGoal] = useState('');
   const [taskTitle, setTaskTitle] = useState('');
-  const [taskAgent, setTaskAgent] = useState('chief');
+  const [taskAgent, setTaskAgent] = useState('product');
 
   const load = useCallback(async () => {
     try {
