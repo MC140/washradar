@@ -1,5 +1,6 @@
-import {Database, ShieldAlert} from 'lucide-react';
+import {Building2, Database, ShieldAlert} from 'lucide-react';
 import {useEffect, useState} from 'react';
+import {Link} from 'react-router-dom';
 import {toast} from 'sonner';
 import {repository} from '../services';
 import {GTA_IMPORT_QUERY_COUNT, importFullGtaCatalogue} from '../services/adminCatalogue';
@@ -62,6 +63,10 @@ export function AdminPage() {
     {error && <div className="locked-admin"><ShieldAlert size={30} /><h2>Protected route</h2><p>{error}</p></div>}
     {snapshot && <>
       <div className="admin-metrics"><article><small>Washes</small><strong>{snapshot.washCount}</strong></article><article><small>Active queue sessions</small><strong>{snapshot.activeSessionCount}</strong></article><article><small>Active campaigns</small><strong>{snapshot.activeCampaignCount}</strong></article></div>
+
+      <section className="panel"><Building2 size={24} /><p className="eyebrow">FOUNDER OPERATING SYSTEM</p><h2>WashRadar HQ</h2><p>Run the six-agent company, give the Chief of Staff goals, review live health signals, manage work, approvals and shared memory — with Month 1 Zero-Cost Mode enforced.</p>
+        <Link className="primary-button" to="/admin/hq">Open WashRadar HQ</Link>
+      </section>
 
       <section className="panel"><Database size={24} /><p className="eyebrow">PRODUCTION CATALOGUE</p><h2>Greater Toronto Area</h2><p>Searches Toronto plus nearby municipalities using paginated Google Text Search. Google Place IDs are de-duplicated, then saved washes are refreshed with real weekly hours, business status, address and rating.</p>
         <button className="primary-button" disabled={importing || typeEnriching} onClick={() => void bootstrapGta()}>{importing ? 'Continuing GTA catalogue repair…' : 'Continue / refresh full GTA catalogue'}</button>
