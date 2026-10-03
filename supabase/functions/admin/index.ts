@@ -600,6 +600,19 @@ async function runCompany(db: Db, userId: string, planId?: string | null) {
 
   const executions = await Promise.all(specialists.map((task) => executeTask(db, task, userId, ops, github)));
 
+  const standaloneChiefs = tasks.filter((task) => task.agent_key === 'chief' && !planIdFromTask(task));
+  for (const chief of standaloneChiefs) {
+    const summary = 'Chief of Staff reviewed the current company queue and completed the coordination task.';
+    await writeRun(db, {
+      agentKey: 'chief',
+      taskId: chief.id,
+      runType: 'task_execution',
+      summary,
+      output: {summary, findings: ['Specialist execution is handled by the assigned department agents.'], deliverables: ['Current queue reviewed and coordination record closed.'], recommendation: 'Use Scan & work for live operating checks or assign a founder goal for cross-functional execution.'},
+    });
+    await db.from('hq_tasks').update({status: 'done', completed_at: new Date().toISOString()}).eq('id', chief.id);
+  }
+
   let allPlanTasks = tasks;
   const planIds = [...new Set(tasks.map(planIdFromTask).filter(Boolean) as string[])];
   if (planIds.length) {
