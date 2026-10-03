@@ -155,15 +155,17 @@ async function scopeWashIds(db: Db, goal: string) {
   const scope = scopeFromGoal(goal);
   if (!scope.postalPrefixes.length) return {scope, ids: [] as string[]};
 
-  const clauses = scope.postalPrefixes.map((prefix) => `postal_code.ilike.${prefix}%`).join(',');
-  const {data, error} = await db.from('wash_locations')
-    .select('wash_id,postal_code,city,address_line')
-    .or(clauses)
-    .limit(1200);
-  if (error) throw error;
+  const groups = await Promise.all(scope.postalPrefixes.map(async (prefix) => {
+    const {data, error} = await db.from('wash_locations')
+      .select('wash_id,postal_code,city,address_line')
+      .ilike('postal_code', `${prefix}%`)
+      .limit(1200);
+    if (error) throw error;
+    return data ?? [];
+  }));
   return {
     scope,
-    ids: [...new Set((data ?? []).map((item: any) => String(item.wash_id)))],
+    ids: [...new Set(groups.flat().map((item: any) => String(item.wash_id)))],
   };
 }
 
