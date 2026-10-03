@@ -616,11 +616,14 @@ async function runCompany(db: Db, userId: string, planId?: string | null) {
   let allPlanTasks = tasks;
   const planIds = [...new Set(tasks.map(planIdFromTask).filter(Boolean) as string[])];
   if (planIds.length) {
-    const {data: refreshed, error: refreshError} = await db.from('hq_tasks')
-      .select('id,title,detail,agent_key,status,priority,source,dedupe_key,approval_required')
-      .or(planIds.map((id) => `dedupe_key.like.plan:${id}:%`).join(','));
-    if (refreshError) throw refreshError;
-    allPlanTasks = (refreshed ?? []) as HqTaskRecord[];
+    const refreshedGroups = await Promise.all(planIds.map(async (id) => {
+      const {data: refreshed, error: refreshError} = await db.from('hq_tasks')
+        .select('id,title,detail,agent_key,status,priority,source,dedupe_key,approval_required')
+        .like('dedupe_key', `plan:${id}:%`);
+      if (refreshError) throw refreshError;
+      return refreshed ?? [];
+    }));
+    allPlanTasks = refreshedGroups.flat() as HqTaskRecord[];
   }
 
   const chiefBriefs = await finalizeChiefTasks(db, allPlanTasks, userId);
