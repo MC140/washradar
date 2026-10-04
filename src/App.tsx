@@ -10,7 +10,6 @@ import {AlertsPage} from './pages/AlertsPage';
 import {AuthConfirmPage} from './pages/AuthConfirmPage';
 import {ChallengesPage} from './pages/ChallengesPage';
 import {ExplorePage} from './pages/ExplorePage';
-import {HQPage} from './pages/HQPage';
 import {LegalPage} from './pages/LegalPage';
 import {NotFoundPage} from './pages/NotFoundPage';
 import {ProfilePage} from './pages/ProfilePage';
@@ -40,7 +39,6 @@ export default function App() {
     <Route path="support" element={<LegalPage page="support" />} />
     <Route path="account-deletion" element={<AccountDeletionPage />} />
     <Route path="admin" element={<AdminPage />} />
-    <Route path="admin/hq" element={<HQPage />} />
     <Route path="ad-preview" element={<AdPreviewPage />} />
     <Route path="*" element={<NotFoundPage />} />
   </Route></Routes></WashRadarProvider></BrowserRouter>;
