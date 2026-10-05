@@ -26,3 +26,27 @@ jobs:
           VITE_DEMO_MODE: "false"
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run production friend-release audit
+        continue-on-error: true
+        timeout-minutes: 8
+        run: npx playwright test --config=playwright.production.config.ts
+        env:
+          PROD_BASE_URL: https://washradar.ca
+      - name: Run local demo end-to-end suite
+        continue-on-error: true
+        timeout-minutes: 3
+        run: npx playwright test --timeout=20000 --workers=4
+      - name: Upload browser audit artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: friend-release-browser-audit
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            playwright-report/
+            playwright-report-production/
+            test-results/
+            test-results-production/
