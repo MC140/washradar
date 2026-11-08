@@ -63,13 +63,31 @@ async function main() {
       return raw ? JSON.parse(raw) : null;
     }, LOCATION_STORAGE_KEY);
 
-    const box = await map.boundingBox();
-    if (!box) throw new Error('Could not measure map for pan interaction');
-    const startX = box.x + box.width * 0.55;
-    const startY = box.y + box.height * 0.55;
-    await page.mouse.move(startX, startY);
+    // A fixed percentage of the map can land on a wash pin or cluster.
+    // Those intentionally stop pointerdown propagation, so dragging them does
+    // not pan the map. Start from an unobstructed tile just like a real user.
+    await map.scrollIntoViewIfNeeded();
+    const dragStart = await map.evaluate((mapElement) => {
+      const rect = mapElement.getBoundingClientRect();
+      const candidates = [
+        [0.33, 0.35], [0.67, 0.35], [0.33, 0.65], [0.67, 0.65],
+        [0.5, 0.35], [0.5, 0.65], [0.25, 0.5], [0.75, 0.5],
+      ];
+      for (const [fx, fy] of candidates) {
+        const x = rect.left + rect.width * fx;
+        const y = rect.top + rect.height * fy;
+        const target = document.elementFromPoint(x, y);
+        if (!target || !mapElement.contains(target)) continue;
+        if (target.closest('.map-pin, .map-cluster, .map-controls, .map-legend, .map-attribution, .map-preview, button, a')) continue;
+        return {x, y};
+      }
+      return null;
+    });
+    if (!dragStart) throw new Error('Cannot find an unobstructed map tile to start the pan gesture');
+
+    await page.mouse.move(dragStart.x, dragStart.y);
     await page.mouse.down();
-    await page.mouse.move(startX - 80, startY + 35, {steps: 8});
+    await page.mouse.move(dragStart.x - 80, dragStart.y + 35, {steps: 8});
     await page.mouse.up();
 
     const searchArea = page.getByRole('button', {name: 'Search this area'});
