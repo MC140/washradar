@@ -72,8 +72,9 @@ export function AppShell() {
       <main id="main-content" className="app-main"><Outlet /></main>
       <footer className="site-footer">
         <div><strong>WashRadar</strong><span>Good timing. Great shine.</span></div>
-        <nav aria-label="Car wash guides"><a href={import.meta.env.BASE_URL + "car-wash/"}>GTA car wash guides</a><a href={import.meta.env.BASE_URL + "car-wash/how-it-works/"}>How queue estimates work</a></nav>
-        <nav aria-label="Legal">
+        <nav aria-label="Guides and legal information">
+          <a href={import.meta.env.BASE_URL + "car-wash/"}>GTA car wash guides</a>
+          <a href={import.meta.env.BASE_URL + "car-wash/how-it-works/"}>How queue estimates work</a>
           <Link to="/privacy">Privacy</Link>
           <Link to="/terms">Terms</Link>
           <Link to="/sponsored">Sponsored content</Link>
