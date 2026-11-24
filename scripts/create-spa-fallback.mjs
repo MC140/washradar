@@ -1,32 +1,80 @@
-import {copyFile, mkdir, readFile} from 'node:fs/promises';
+import {mkdir, readFile, writeFile} from 'node:fs/promises';
 
 const dist = new URL('../dist/', import.meta.url);
+const site = 'https://washradar.ca';
 const indexUrl = new URL('index.html', dist);
 const index = await readFile(indexUrl, 'utf8');
-if (!index.includes('<div id="root"></div>')) throw new Error('Built index.html is missing the React root.');
-
-// Keep the generic SPA fallback for unknown/dynamic routes such as /wash/:id.
-await copyFile(indexUrl, new URL('404.html', dist));
-
-// GitHub Pages otherwise returns HTTP 404 before React renders a known client route.
-// Create real static entry points for store-facing and account/public routes so direct
-// navigation gets an actual 200 response while React still owns the rendered screen.
-const staticRoutes = [
-  'saved',
-  'alerts',
-  'challenges',
-  'vehicles',
-  'profile',
-  'auth/confirm',
-  'privacy',
-  'terms',
-  'sponsored',
-  'support',
-  'account-deletion',
+if (!index.includes('<div id="root">')) throw new Error('Built index.html is missing the React root.');
+const escape = (value) => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const json = (value) => JSON.stringify(value).replace(/</g, '\\u003c');
+const base = index.match(/href="([^"]*)manifest\.webmanifest"/)?.[1] || '/';
+const link = (path) => base + path.replace(/^\//, '');
+const home = link('/');
+const cityData = [
+  ['toronto','Toronto','Scarborough, North York, Etobicoke and downtown Toronto','Start with your neighbourhood or postal code rather than the whole city; a wash across town may take longer to reach even if the estimated line is shorter.','For street parking and condos, a touchless or automatic wash may be convenient; self-serve can help when you want to focus on wheels or road salt.'],
+  ['markham','Markham','Unionville, Milliken, Cornell and Thornhill','Compare washes near your home or along your route on Highway 7, rather than assuming the closest wash is the fastest.','Check the wash-type filter before travelling; a touchless bay and a soft-cloth tunnel are different services.'],
+  ['mississauga','Mississauga','Meadowvale, Streetsville, Erin Mills and Port Credit','Search your postal code or the area around your destination, such as a shopping trip, rather than driving across the city for a shorter line.','Compare the estimated queue plus wash duration separately from the travel distance, particularly when several options are nearby.'],
+  ['brampton','Brampton','Bramalea, Heart Lake, Mount Pleasant and downtown Brampton','Search around your destination or neighbourhood and compare estimated waits with distance before committing to a route.','If price is the deciding factor, use the price sort when verified pricing exists; check the package details at the wash.'],
+  ['vaughan','Vaughan','Woodbridge, Maple, Concord and Kleinburg','Look near your destination or commute route; industrial and residential areas can be far apart even within the same municipality.','For larger vehicles, confirm the wash’s height and equipment restrictions directly before choosing an automatic or tunnel wash.'],
+  ['richmond-hill','Richmond Hill','Oak Ridges, Langstaff, Bayview Hill and the Yonge Street corridor','Search by a specific neighbourhood or postal code to avoid comparing distant parts of the city.','If a recent snowfall or thaw leaves salt on your car, compare nearby options and check whether an underbody rinse is offered.'],
+  ['oakville','Oakville','Bronte, Glen Abbey, Uptown Core and downtown Oakville','Compare washes near your errands or commute instead of choosing solely by a city-wide result.','After winter driving, consider the wash package and whether it includes the cleaning you need, not just the shortest line.'],
+  ['ajax-pickering','Ajax and Pickering','Pickering City Centre, West Shore, downtown Ajax and surrounding Durham Region communities','Search Ajax or Pickering separately, or use your postal code, to compare options on your side of the city boundary.','A short estimated queue may still be less convenient if the drive is longer; use the distance and timing information together.'],
 ];
-
-for (const route of staticRoutes) {
-  const directory = new URL(`${route}/`, dist);
-  await mkdir(directory, {recursive: true});
-  await copyFile(indexUrl, new URL('index.html', directory));
+const routes = [];
+const hub = '/car-wash/';
+const method = hub + 'how-it-works/';
+const winter = hub + 'winter-car-wash/';
+const types = hub + 'touchless-vs-soft-cloth/';
+const list = cityData.map(([slug, name]) => [hub + slug + '/', name]);
+const links = (items) => '<ul>' + items.map(([path,label]) => '<li><a href="' + escape(link(path)) + '">' + escape(label) + '</a></li>').join('') + '</ul>';
+const p = (s) => '<p>' + escape(s) + '</p>';
+const h = (s) => '<h2>' + escape(s) + '</h2>';
+const cta = (label = 'Open the free WashRadar web app') => '<p><a class="cta" href="' + escape(home) + '">' + escape(label) + '</a></p>';
+const guideLinks = [[method,'How queue estimates work'],[winter,'Winter car wash guide'],[types,'Touchless vs. soft-cloth car washes']];
+const faq = [
+  ['Is WashRadar free?', 'Yes. Drivers can browse the web app for free without an account. Some community and account features may require signing in.'],
+  ['Are car wash wait times always live?', 'No. Estimates depend on available community observations and their freshness. Missing or stale evidence may be shown as unknown.'],
+  ['Can I search without location permission?', 'Yes. Search by city, postal code or address instead of using GPS.'],
+  ['Does WashRadar sell car washes?', 'WashRadar helps compare car washes. Confirm prices, packages and availability directly with the operator.'],
+];
+const faqHtml = faq.map(([q,a]) => h(q)+p(a)).join('');
+const faqSchema = {'@type':'FAQPage',mainEntity:faq.map(([q,a])=>({'@type':'Question',name:q,acceptedAnswer:{'@type':'Answer',text:a}}))};
+async function page(path,title,description,body,extraSchema = null) {
+  const url=site+path;
+  const schema={'@context':'https://schema.org','@graph':[
+    {'@type':'WebPage','@id':url+'#page',url,name:title,description,isPartOf:{'@id':site+'/#website'},publisher:{'@id':site+'/#organization'}},
+    {'@type':'BreadcrumbList',itemListElement:[{'@type':'ListItem',position:1,name:'WashRadar',item:site+'/'},...(path===hub?[]:[{'@type':'ListItem',position:2,name:'GTA car wash guides',item:site+hub}]),{'@type':'ListItem',position:path===hub?2:3,name:title,item:url}]},
+    ...(extraSchema?[extraSchema]:[])
+  ]};
+  const html='<!doctype html><html lang="en-CA"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#0b8064"><title>'+escape(title)+' | WashRadar</title><meta name="description" content="'+escape(description)+'"><link rel="canonical" href="'+url+'"><link rel="icon" href="'+escape(link('/favicon.svg'))+'"><meta property="og:type" content="website"><meta property="og:site_name" content="WashRadar"><meta property="og:title" content="'+escape(title)+'"><meta property="og:description" content="'+escape(description)+'"><meta property="og:url" content="'+url+'"><meta property="og:image" content="'+site+'/icon-512.png"><meta name="twitter:card" content="summary"><script type="application/ld+json">'+json(schema)+'</script><style>*,*::before,*::after{box-sizing:border-box}body{margin:0;background:#f5f8f7;color:#162d28;font:17px/1.65 system-ui,sans-serif}header,footer{background:#fff;padding:18px 24px;border-bottom:1px solid #dce6e2}header a{font-weight:800;text-decoration:none}main{max-width:850px;margin:0 auto;padding:32px 24px 48px}h1{font-size:clamp(32px,5vw,48px);line-height:1.12;letter-spacing:-.035em}h2{font-size:23px;line-height:1.3;margin-top:32px}a{color:#08694f}a:focus-visible{outline:3px solid #0b8064;outline-offset:3px}.cta{display:inline-block;background:#08765a;color:#fff;padding:12px 20px;border-radius:10px;text-decoration:none;font-weight:700}li{margin:6px 0}footer{font-size:14px}nav{font-size:15px}</style></head><body><header><a href="'+escape(home)+'">WashRadar</a></header><main><nav aria-label="Breadcrumb"><a href="'+escape(home)+'">Home</a> / <a href="'+escape(link(hub))+'">GTA car wash guides</a></nav><h1>'+escape(title)+'</h1>'+body+'</main><footer><a href="'+escape(home)+'">Explore car washes</a> · <a href="'+escape(link('/support'))+'">Contact &amp; support</a> · <a href="'+escape(link('/privacy'))+'">Privacy</a><p>Queue, price and availability can change. Verify before travelling. Use WashRadar only when safely parked.</p></footer></body></html>';
+  const dir=new URL('.'+path,dist);
+  await mkdir(dir,{recursive:true});
+  await writeFile(new URL('index.html',dir),html);
+  if(!html.includes('<h1>')||!html.includes('rel="canonical" href="'+url+'"')||!html.includes('application/ld+json'))throw new Error('SEO page incomplete: '+path);
+  routes.push({path,title,description});
 }
+await page(hub,'GTA car wash finder and local guides','Find car washes around Toronto and the GTA with WashRadar. Explore local guides, compare wash types and learn how community queue estimates work.',p('WashRadar is a free car wash discovery web app for drivers in the Greater Toronto Area. Search by city, postal code or address, then compare nearby car washes using distance, estimated queue and wash time, and prices where available.')+cta()+h('Explore by city')+links(list)+h('Plan your next car wash')+links(guideLinks)+h('Frequently asked questions')+faqHtml,faqSchema);
+for(const [slug,name,areas,tip,advice] of cityData){
+  await page(hub+slug+'/', 'Find car washes in '+name, 'Use WashRadar to find car washes in '+name+', Ontario. Compare distance, wash types and estimated waits when data is available.',p('Looking for a car wash in '+name+'? WashRadar helps you compare nearby options with community-powered queue estimates, wash types, distance and prices where known.')+cta('Open WashRadar and search '+name)+h('Where to search')+p('Try searching a city, neighbourhood, postal code or address. Areas to consider include '+areas+'. '+tip)+h('Choose the right wash')+p(advice)+p('WashRadar supports filters for touchless, soft-cloth, automatic, tunnel, self-serve and hand-wash services when type data is available. Confirm operating hours and package details with the operator.')+h('Compare queue estimates')+p('A recently reported queue may help you choose between washes. Missing evidence does not mean there is no line. Check the time and confidence shown in the app before heading out.')+links(guideLinks)+h('More GTA areas')+links(list.filter(([path])=>path!==hub+slug+'/')));
+}
+await page(method,'How WashRadar car wash queue estimates work','Understand community queue reports, verified visits, missing data and how WashRadar compares nearby car washes.',p('WashRadar combines available car wash catalogue details and community observations to help drivers plan a visit. It is not a camera feed or a guarantee of a real-time wait.')+h('Where the wait estimate comes from')+p('Drivers can report a queue bucket or contribute a timed wait session. Completed verified sessions and fresh nearby reports carry more weight than remote or older observations. Evidence loses relevance as it ages.')+h('What the comparison means')+p('WashRadar considers distance, wait, wash duration, price when available and data confidence. Queue plus wash time is shown separately from travel time. Unknown data stays unknown; a zero-minute queue is not assumed when evidence is missing.')+h('Independence and corrections')+p('Sponsored placements are labelled and do not buy a better organic recommendation. Report incorrect listings or prices through the app or contact support@washradar.ca. Do not submit a report while driving.')+cta()+links([[hub,'All GTA guides'],...guideLinks.filter(([path])=>path!==method)]));
+await page(winter,'Winter car wash guide for the GTA','Plan a winter car wash in the GTA, compare queues after snow or thaw, and check wash options for road salt.',p('Winter driving in Ontario can leave road salt and dirt on your vehicle. Plan a wash when it is safe to travel and follow your vehicle manufacturer’s care instructions.')+h('When to consider a wash')+p('After salted roads, check the forecast, the wash’s operating hours and the available cleaning packages. Avoid driving just to chase a shorter line during unsafe conditions. An underbody rinse may be useful if offered and appropriate for your vehicle.')+h('Compare the time you actually spend')+p('Search your area in WashRadar and compare distance, estimated queue and wash duration when available. After a thaw, demand can change quickly, so treat estimates as planning information rather than a promise.')+h('Before entering the wash')+p('Confirm height and accessory restrictions, follow operator instructions and use a wash type suitable for your vehicle. Dry door seals as appropriate in freezing conditions.')+cta()+links([[hub,'Find your city'],[method,'How queue estimates work'],[types,'Choose a wash type']]));
+await page(types,'Touchless vs. soft-cloth car washes','Compare touchless, soft-cloth and self-serve car wash options and find nearby washes in the GTA.',p('Touchless washes use water pressure and cleaning solutions without brushes contacting the vehicle. Soft-cloth washes use moving material to clean the surface. Self-serve bays let the driver control the process.')+h('Which is better for your car?')+p('There is no universal winner. Consider the manufacturer’s advice, the condition of the paint, the wash operator’s equipment and maintenance, and any vehicle accessories. Touchless avoids direct brush contact but may not remove all stubborn dirt; soft-cloth can provide mechanical cleaning.')+h('Find the type you prefer')+p('WashRadar offers wash-type filters where catalogue data is verified. Unknown wash types are not guessed. Confirm the type and any height or accessory limits with the business before travelling.')+cta()+links([[hub,'Find car washes in your city'],[winter,'Winter wash guide'],[method,'How queue estimates work']]));
+// Non-home SPA pages must not inherit the home canonical or schema.
+const fallback=index.replace(/<div id="root">[\s\S]*?<\/div>/,'<div id="root"></div>')
+  .replace(/<link rel="canonical"[^>]*>/,'')
+  .replace(/<script type="application\/ld\+json" id="washradar-schema">[\s\S]*?<\/script>/,'')
+  .replace(/<meta property="og:[^"]+"[^>]*>/g,'')
+  .replace(/<title>[\s\S]*?<\/title>/,'<title>WashRadar</title>');
+const noindex=fallback.replace('</head>','<meta name="robots" content="noindex, follow"></head>');
+await writeFile(new URL('404.html',dist),noindex);
+for(const route of ['saved','alerts','challenges','vehicles','profile','auth/confirm','privacy','terms','sponsored','support','account-deletion','admin','ad-preview','go']){
+  const dir=new URL(route+'/',dist);
+  await mkdir(dir,{recursive:true});
+  await writeFile(new URL('index.html',dir),noindex);
+}
+const urls=['/',...routes.map(r=>r.path)];
+await writeFile(new URL('sitemap.xml',dist),'<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'+urls.map(path=>'  <url><loc>'+site+path+'</loc></url>').join('\n')+'\n</urlset>\n');
+await writeFile(new URL('robots.txt',dist),'User-agent: *\nAllow: /\nDisallow: /api/\n\nSitemap: '+site+'/sitemap.xml\n');
+await writeFile(new URL('llms.txt',dist),'# WashRadar\n\n> Free Greater Toronto Area car wash finder with community-powered queue estimates. Unknown or stale data is not represented as live.\n\n## Official resources\n- [Web app]('+site+'/): compare nearby car washes.\n'+routes.map(r=>'- ['+r.title+']('+site+r.path+'): '+r.description).join('\n')+'\n\nContact: support@washradar.ca\n');
+console.log('SEO: generated '+routes.length+' static guides and '+urls.length+' sitemap URLs.');

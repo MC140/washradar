@@ -1,4 +1,4 @@
-const CACHE = 'washradar-shell-v13';
+const CACHE = 'washradar-shell-v14';
 const scopeUrl = new URL(self.registration.scope);
 const local = (path) => new URL(path, scopeUrl).toString();
 const SHELL = [local('./'), local('offline.html'), local('favicon.svg'), local('icon-192.png'), local('icon-512.png')];
@@ -13,8 +13,9 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (request.method !== 'GET' || url.origin !== scopeUrl.origin) return;
   if (request.mode === 'navigate') {
+    if (url.pathname.startsWith(new URL('car-wash/', scopeUrl).pathname)) return;
     event.respondWith(fetch(request).then((response) => {
-      if (response.ok) {
+      if (response.ok && url.pathname === scopeUrl.pathname && !url.search) {
         const copy = response.clone();
         void caches.open(CACHE).then((cache) => cache.put(local('./'), copy));
       }

@@ -72,6 +72,7 @@ export function AppShell() {
       <main id="main-content" className="app-main"><Outlet /></main>
       <footer className="site-footer">
         <div><strong>WashRadar</strong><span>Good timing. Great shine.</span></div>
+        <nav aria-label="Car wash guides"><a href={import.meta.env.BASE_URL + "car-wash/"}>GTA car wash guides</a><a href={import.meta.env.BASE_URL + "car-wash/how-it-works/"}>How queue estimates work</a></nav>
         <nav aria-label="Legal">
           <Link to="/privacy">Privacy</Link>
           <Link to="/terms">Terms</Link>
@@ -79,7 +80,7 @@ export function AppShell() {
           <Link to="/support">Support</Link>
           <Link to="/account-deletion">Delete account</Link>
         </nav>
-        <small>Queue, price and availability information may change. Verify before travelling.</small>
+        <small>WashRadar is a free GTA car wash finder. Compare nearby wash types, drive distance and community-powered queue estimates when available. Queue, price and availability information may change. Verify before travelling.</small>
       </footer>
       <nav className="bottom-nav" aria-label="Mobile navigation">
         {mobileNavigation.slice(0, 2).map((item) => <NavItem key={item.to} {...item} />)}
