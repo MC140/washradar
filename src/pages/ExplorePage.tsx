@@ -1,4 +1,4 @@
-import {lazy, Suspense, useEffect, useMemo, useState} from 'react';
+import {lazy, Suspense, useEffect, useMemo, useRef, useState} from 'react';
 import {ChevronRight, List, LocateFixed, Map as MapIcon, Navigation, Search, ShieldCheck, SlidersHorizontal} from 'lucide-react';
 import {Link} from 'react-router-dom';
 import {useWashRadar} from '../state/WashRadarContext';
@@ -32,13 +32,28 @@ const chips: {type?: WashType; label: string}[] = [
 export function ExplorePage() {
   const {mode, origin, locationReady, washes, loading, error, offline, filters, setFilters, sort, setSort, favourites, toggleFavourite, locate, search, exploreAt, refresh} = useWashRadar();
   const [view, setView] = useState<'list' | 'map'>('list');
-  const [query, setQuery] = useState('');
+  const [initialArea] = useState(() => {
+    const area = new URLSearchParams(window.location.search).get('area') ?? '';
+    return ['Toronto','Markham','Mississauga','Brampton','Vaughan','Richmond Hill','Oakville','Ajax','Pickering'].includes(area) ? area : '';
+  });
+  const initialAreaHandled = useRef(false);
+  const [query, setQuery] = useState(initialArea);
   const [filterOpen, setFilterOpen] = useState(false);
   const [searchMessage, setSearchMessage] = useState('');
   const [selectedMapWash, setSelectedMapWash] = useState<RankedWash>();
   const [reportingWash, setReportingWash] = useState<RankedWash>();
   const [ads, setAds] = useState<AdCreative[]>([]);
-  const [locationPrompt, setLocationPrompt] = useState(() => !locationReady && localStorage.getItem('wr-location-intro') !== 'seen');
+  const [locationPrompt, setLocationPrompt] = useState(() => !initialArea && !locationReady && localStorage.getItem('wr-location-intro') !== 'seen');
+
+  useEffect(() => {
+    if (!initialArea || initialAreaHandled.current) return;
+    initialAreaHandled.current = true;
+    setSearchMessage('Searching ' + initialArea + '…');
+    void search(initialArea).then(found => {
+      setSearchMessage(found ? '' : 'No matching area found. Try a city, postal code or address.');
+      if (found) setQuery(current => current === initialArea ? '' : current);
+    }).catch(() => setSearchMessage('Search is unavailable right now. Try searching again.'));
+  }, [initialArea, search]);
 
   const typeCounts = useMemo(() => {
     const counts = new Map<WashType, number>();

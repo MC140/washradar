@@ -468,3 +468,11 @@ h1, h2, h3, .brand { font-family: ui-rounded, 'SF Pro Rounded', ui-sans-serif, s
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* Keep the footer within its viewport, including long SEO and policy links. */
+.site-footer { grid-template-columns: minmax(0, auto) minmax(0, 1fr) minmax(0, 300px); }
+.site-footer > * { min-width: 0; overflow-wrap: anywhere; }
+.site-footer nav a { min-width: 0; max-width: 100%; }
+@media (max-width: 700px) {
+  .site-footer { grid-template-columns: minmax(0, 1fr); }
+}

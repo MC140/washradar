@@ -10,3 +10,6 @@ The production host is https://washradar.ca/. The build generates the homepage m
 
 ## Authority and useful content
 Seek genuine editorial mentions from GTA auto clubs, local publications and relevant community groups. Be transparent about affiliation, follow community rules, and do not buy links or manufacture reviews. Offer useful findings only when aggregated real observations justify them. Avoid thin city duplicates, fabricated listings, fake review markup and unsupported live claims. Consider real location-specific directory pages once publishable verified catalogue data is available.
+
+## Ranking priorities
+Use city and intent searches to establish baselines (queue, wait time, touchless, self-serve, price, and car wash finder). Distinguish paid clicks, organic results, and third-party mentions. City guides link to the actual app with a city-selected search rather than a generic home page. Do not publish bulk Google Places data as an indexable directory without reviewing the applicable storage, attribution, and display terms; develop verified first-party listings with operator permission instead. Google Ads do not buy higher organic search ranking.
