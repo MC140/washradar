@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {estimateQueue, freshnessWeight, hasQueueEvidence, queueBucketToWait, rankWashes, totalTime} from '../src/domain/engine.ts';
+import {estimateQueue, freshnessWeight, hasQueueEstimate, hasQueueEvidence, queueBucketToWait, rankWashes, totalTime} from '../src/domain/engine.ts';
 import {contributorLevel, initials} from '../src/domain/community.ts';
 import {DEMO_ORIGIN, DEMO_WASHES} from '../src/data/demo.ts';
 
@@ -102,4 +102,30 @@ test('Radar Points map deterministically to contributor levels', () => {
 test('profile initials prefer display name and safely fall back to email', () => {
   assert.equal(initials('Manohar Chekka', 'x@example.com'), 'MC');
   assert.equal(initials(null, 'radar@example.com'), 'RA');
+});
+
+test('production cold-start prediction is stable, labeled and not report evidence', () => {
+  const wash = {...DEMO_WASHES[0], dataEnvironment: 'production', status: 'open', historicalSampleCount: 0, historicalWaitMinutes: 0};
+  const now = new Date('2026-11-28T17:00:00Z');
+  const result = estimateQueue(wash, [], now);
+  assert.ok(result.prediction);
+  assert.equal(result.dataState, 'ESTIMATED');
+  assert.equal(result.lastUpdatedAt, null);
+  assert.equal(result.recentSignalCount, 0);
+  assert.equal(result.confidenceScore, 8);
+  assert.equal(hasQueueEvidence(wash, result), false);
+  assert.equal(hasQueueEstimate(wash, result), true);
+  assert.deepEqual(estimateQueue(wash, [], new Date('2026-11-28T17:15:00Z')), result);
+  const morning = estimateQueue(wash, [], new Date('2026-11-28T12:00:00Z'));
+  assert.ok(morning.waitMinutes < result.waitMinutes);
+  const report = {...signal(wash.id, 'driver', 0, 0), createdAt: now.toISOString()};
+  const actual = estimateQueue(wash, [report], now);
+  assert.equal(actual.prediction, undefined);
+  assert.equal(actual.waitMinutes, 0);
+  assert.equal(hasQueueEvidence(wash, actual), true);
+  assert.ok(estimateQueue(wash, [report], new Date('2026-11-28T18:01:00Z')).prediction);
+  assert.equal(estimateQueue({...wash, status: 'closed'}, [], now).prediction, undefined);
+  assert.equal(estimateQueue({...wash, status: 'unavailable'}, [], now).prediction, undefined);
+  assert.equal(estimateQueue({...wash, status: 'unknown'}, [], new Date('2026-11-28T07:00:00Z')).prediction, undefined);
+  assert.equal(estimateQueue({...wash, historicalSampleCount: 1}, [], now).prediction, undefined);
 });

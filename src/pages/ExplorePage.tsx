@@ -2,7 +2,7 @@ import {lazy, Suspense, useEffect, useMemo, useRef, useState} from 'react';
 import {ChevronRight, List, LocateFixed, Map as MapIcon, Navigation, Search, ShieldCheck, SlidersHorizontal} from 'lucide-react';
 import {Link} from 'react-router-dom';
 import {useWashRadar} from '../state/WashRadarContext';
-import {hasQueueEvidence, startingPrice} from '../domain/engine';
+import {hasQueueEstimate, hasQueueEvidence, startingPrice} from '../domain/engine';
 import type {AdCreative, RankedWash, SortMode, WashFilters, WashType} from '../domain/models';
 import {WASH_TYPE_CONFIG} from '../domain/config';
 import {WashCard} from '../components/WashCard';
@@ -65,7 +65,7 @@ export function ExplorePage() {
   const typeDataAvailable = [...typeCounts.values()].some((count) => count > 0);
   const priceDataAvailable = washes.some((wash) => Number.isFinite(startingPrice(wash)));
   const hoursDataAvailable = washes.some((wash) => wash.estimate.operatingStatus !== 'unknown');
-  const queueDataAvailable = washes.some((wash) => hasQueueEvidence(wash, wash.estimate));
+  const queueDataAvailable = washes.some((wash) => hasQueueEstimate(wash, wash.estimate));
   const sortOptions = baseSortOptions.filter((option) =>
     (option !== 'Lowest Price' || priceDataAvailable) &&
     (option !== 'Shortest Queue' || queueDataAvailable),
@@ -97,7 +97,7 @@ export function ExplorePage() {
     const unknownLast = (known: boolean, value: number) => known ? value : Number.POSITIVE_INFINITY;
     return values.sort((a, b) =>
       sort === 'Shortest Queue'
-        ? unknownLast(hasQueueEvidence(a, a.estimate), a.estimate.waitMinutes) - unknownLast(hasQueueEvidence(b, b.estimate), b.estimate.waitMinutes)
+        ? unknownLast(hasQueueEstimate(a, a.estimate), a.estimate.waitMinutes) - unknownLast(hasQueueEstimate(b, b.estimate), b.estimate.waitMinutes)
         : sort === 'Nearest'
           ? a.distanceKm - b.distanceKm
           : sort === 'Lowest Price'
@@ -144,7 +144,7 @@ export function ExplorePage() {
       {error && <div className="error-banner" role="alert"><span>{error}</span><button onClick={() => void refresh()}>Try again</button></div>}
 
       <section className="hero">
-        <div><p className="eyebrow">A CLEAN CAR. A CLEAR ROUTE.</p><h1>Where should you wash your car <em>right now?</em></h1><p>Compare the drive, queue, wash time and price when that data is available. Unknowns stay marked unknown.</p></div>
+        <div><p className="eyebrow">A CLEAN CAR. A CLEAR ROUTE.</p><h1>Where should you wash your car <em>right now?</em></h1><p>Compare nearby washes using driver reports or clearly labeled demand estimates. Actual conditions may differ.</p></div>
         <button className="secondary-button locate-hero" onClick={() => void locate()}><Navigation size={17} /> Use my location</button>
       </section>
 
@@ -175,8 +175,8 @@ export function ExplorePage() {
               <h2>{bestIsFullyInformed ? 'Best is more than closest.' : 'Best available estimate.'}</h2>
               <p>{bestIsFullyInformed
                 ? 'WashRadar weighs your drive, queue, wash time, price and data confidence. Paid placements never change this result.'
-                : 'Live queue, hours or price data is still limited here. WashRadar uses what is known and adds an uncertainty penalty instead of treating missing data as zero.'}</p>
-              <div><ShieldCheck size={17} /> Unknown data stays visible as unknown</div>
+                : 'Live queue, hours or price data is still limited here. WashRadar uses rough demand estimates where available and adds an uncertainty penalty.'}</p>
+              <div><ShieldCheck size={17} /> Predictions are labeled, never live reports</div>
             </aside>
           </div>
           <div className="decision-strip" aria-label="Quick comparisons">
@@ -222,7 +222,7 @@ export function ExplorePage() {
       {locationReady && !loading && filtered.length > 0 && (view === 'list'
         ? <div className="cards-grid">{filtered.map((wash) => <WashCard key={wash.id} wash={wash} saved={favourites.includes(wash.id)} onSave={() => void toggleFavourite(wash.id)} onReport={() => setReportingWash(wash)} />)}</div>
         : <div className="map-section">
-            <p className="map-browse-hint">Drag the map to another neighbourhood, then choose <strong>Search this area</strong>. Tap a wash marker to see its details.</p>
+            <p className="map-browse-hint">Drag the map to another neighbourhood, then choose <strong>Search this area</strong>. Tap a wash marker to see its details, including demand estimates where available. Map wait labels use report or historical data only.</p>
             <Suspense fallback={<div className="map-skeleton" />}>
               <MapView
                 washes={filtered}
@@ -235,7 +235,7 @@ export function ExplorePage() {
                 }}
               />
             </Suspense>
-            {selectedMapWash && <div className="map-preview"><button aria-label="Close map preview" onClick={() => setSelectedMapWash(undefined)}>×</button><WashCard compact wash={selectedMapWash} saved={favourites.includes(selectedMapWash.id)} onSave={() => void toggleFavourite(selectedMapWash.id)} onReport={() => setReportingWash(selectedMapWash)} /></div>}
+            {selectedMapWash && <div className="map-preview"><button aria-label="Close map preview" onClick={() => setSelectedMapWash(undefined)}>×</button><WashCard compact wash={filtered.find((wash) => wash.id === selectedMapWash.id) ?? selectedMapWash} saved={favourites.includes(selectedMapWash.id)} onSave={() => void toggleFavourite(selectedMapWash.id)} onReport={() => setReportingWash(selectedMapWash)} /></div>}
           </div>
       )}
 
