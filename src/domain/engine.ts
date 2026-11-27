@@ -82,7 +82,12 @@ function demandPrediction(wash: CarWash, now: Date): QueueEstimate['prediction']
   let hash = 2166136261;
   for (const char of wash.id) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
   const variation = (hash >>> 0) % 5;
-  const base = peak ? 2 + variation : daytime ? variation : Math.floor(variation / 3);
+  // These are conservative demand priors, not measured site traffic.
+  // Faster tunnel and self-serve formats generally clear queues more quickly.
+  const formatFactor = wash.types.includes('tunnel') || wash.types.includes('self-serve') ? 0.8
+    : wash.types.includes('touchless') || wash.types.includes('hand-wash') ? 1.15 : 1;
+  const throughputFactor = Math.max(0.75, Math.min(1.3, wash.minutesPerCar / 4));
+  const base = (peak ? 2 + variation : daytime ? variation : variation * 0.5) * formatFactor * throughputFactor;
   const factor = weatherDemandFactor(wash, now);
   const center = Math.min(10, Math.max(0, Math.round(base * factor)));
   const maxCars = Math.min(12, center + 1);
