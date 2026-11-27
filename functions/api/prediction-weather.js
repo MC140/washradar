@@ -18,7 +18,7 @@ export function normalizeObservations(data, now = Date.now()) {
     const observedAt = p['date_tm-value'];
     const age = now - Date.parse(observedAt);
     if (!Number.isFinite(age) || age < -300000 || age > MAX_AGE) continue;
-    const temperatureC = numeric(p.air_temp, -60, 55);
+    const temperatureC = numeric(p.air_temp, -60, 55) ?? numeric(p.avg_air_temp_pst1hr, -60, 55);
     const precipitation1hMm = numeric(p.pcpn_amt_pst1hr, 0, 150);
     const precipitation24hMm = numeric(p.pcpn_amt_pst24hrs, 0, 300);
     if (temperatureC === null) continue;
