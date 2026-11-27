@@ -28,7 +28,7 @@ function carsAhead(value: number | null) {
 }
 
 function reporterLabel(wash: RankedWash) {
-  return wash.estimate.dataState === 'ESTIMATED' ? 'Estimate' : 'Community';
+  return wash.estimate.dataState === 'ESTIMATED' ? 'Typical wait' : wash.estimate.dataState === 'LIVE' ? 'Live community report' : 'Recent community report';
 }
 
 export function WashCard({
@@ -118,7 +118,7 @@ export function WashCard({
       <div className="wash-card-v2-footer">
         <div className={'wash-card-v2-freshness ' + freshness}>
           <i aria-hidden="true" />
-          <span>{prediction ? 'WashRadar estimate · not live' : hasQueueData ? `${source} · ${minutesAgo(wash.estimate.lastUpdatedAt)}` : 'No recent queue report'}</span>
+          <span title={prediction ? 'Predicted from demand factors, not an observed queue. Actual conditions may vary.' : undefined}>{prediction ? 'Estimated demand' : hasQueueData ? (wash.estimate.dataState === 'ESTIMATED' ? source : `${source} · ${minutesAgo(wash.estimate.lastUpdatedAt)}`) : 'No recent queue report'}</span>
         </div>
         <div className="wash-card-v2-total">
           <span>{queueAndWashMinutes !== null ? <>Queue + wash · <strong>~{queueAndWashMinutes} min</strong></> : <>Queue + wash · <strong>unknown</strong></>}</span>
