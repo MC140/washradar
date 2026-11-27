@@ -87,6 +87,8 @@ export interface QueueEstimate {
   operatingStatus: OperatingStatus;
   estimatedCars: number | null;
   recentSignalCount: number;
+  /** Uncalibrated demand heuristic, never a driver report. */
+  prediction?: {minCars: number; maxCars: number};
 }
 
 export interface WeatherSignal {
