@@ -150,3 +150,14 @@ test('weather factors reduce active precipitation demand, increase post-precipit
   assert.equal(historical.prediction, undefined);
   assert.equal(historical.waitMinutes, 15);
 });
+
+test('ECCC observations are deduplicated and stale or malformed data is rejected', async () => {
+  const {normalizeObservations} = await import('../functions/api/prediction-weather.js');
+  const now = Date.parse('2026-11-28T17:00:00Z');
+  const feature = (properties) => ({geometry: {coordinates: [-79.4,43.7]}, properties: {'msc_id-value':'station-a','date_tm-value':'2026-11-28T16:30:00Z',air_temp:2,pcpn_amt_pst1hr:0,pcpn_amt_pst24hrs:5,...properties}});
+  const rows = normalizeObservations({features:[feature({}),feature({'date_tm-value':'2026-11-28T16:45:00Z',air_temp:3}),feature({'msc_id-value':'stale','date_tm-value':'2026-11-28T13:00:00Z'}),feature({'msc_id-value':'invalid',air_temp:null})]},now);
+  assert.equal(rows.length,1);
+  assert.equal(rows[0].temperatureC,3);
+  assert.equal(rows[0].precipitation24hMm,5);
+  assert.deepEqual(normalizeObservations({},now),[]);
+});
