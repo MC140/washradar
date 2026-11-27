@@ -1,6 +1,6 @@
 import {CarFront, Heart, Navigation} from 'lucide-react';
 import {Link} from 'react-router-dom';
-import {hasQueueEvidence} from '../domain/engine';
+import {hasQueueEstimate} from '../domain/engine';
 import type {RankedWash} from '../domain/models';
 import {analytics} from '../services/analytics';
 import {directionsUrl} from '../services/location';
@@ -50,7 +50,7 @@ export function WashCard({
 }) {
   const status = wash.estimate.operatingStatus;
   const unavailable = status === 'closed' || status === 'unavailable';
-  const hasQueueData = hasQueueEvidence(wash, wash.estimate);
+  const hasQueueData = hasQueueEstimate(wash, wash.estimate);
   const queueMinutes = !unavailable && hasQueueData ? wash.estimate.waitMinutes : null;
   const estimatedPrefix = wash.estimate.dataState === 'ESTIMATED' ? '~' : '';
   const tone = waitTone(queueMinutes, unavailable);
@@ -58,6 +58,7 @@ export function WashCard({
   const queueAndWashMinutes = queueMinutes === null ? null : Math.max(0, queueMinutes + wash.estimatedWashMinutes);
   const cars = carsAhead(wash.estimate.estimatedCars);
   const source = reporterLabel(wash);
+  const prediction = wash.estimate.prediction;
 
   const viewDetails = () => {
     analytics.track('wash_viewed', {washId: wash.id});
@@ -78,7 +79,7 @@ export function WashCard({
   return (
     <article className={`wash-card wash-card-v2 tone-${tone} ${best ? 'best-card' : ''}${bestWait ? ' best-wait-card' : ''}${compact ? ' compact-card' : ''}`}>
       <div className={`wash-card-v2-topline${bestWait ? '' : ' no-badge'}`}>
-        {bestWait && <span className="wash-card-v2-best"><span aria-hidden="true">✦</span> Best right now</span>}
+        {bestWait && <span className="wash-card-v2-best"><span aria-hidden="true">✦</span> {prediction ? 'Best estimated option' : 'Best right now'}</span>}
         <button className={'wash-card-v2-save ' + (saved ? 'is-saved' : '')} type="button" onClick={onSave} aria-label={saved ? 'Remove from saved washes' : 'Save this wash'} title={saved ? 'Saved' : 'Save'}>
           <Heart size={16} fill={saved ? 'currentColor' : 'none'} />
         </button>
@@ -103,12 +104,12 @@ export function WashCard({
             <strong className="wash-card-v2-wait-fallback">{waitFallback}</strong>
           )}
           {queueMinutes !== null && cars !== null && (
-            <div className="wash-card-v2-cars" aria-label={`${cars} ${cars === 1 ? 'car' : 'cars'} ahead`}>
+            <div className="wash-card-v2-cars" aria-label={prediction ? `Predicted ${prediction.minCars} to ${prediction.maxCars} cars ahead` : `${cars} ${cars === 1 ? 'car' : 'cars'} ahead`}>
               <span className="wash-card-v2-car-icons" aria-hidden="true">
                 <CarFront size={15} />
                 {cars > 1 && cars < 4 && <CarFront size={15} />}
               </span>
-              <span>{cars === 0 ? 'No cars ahead' : `${cars} ${cars === 1 ? 'car' : 'cars'} ahead`}</span>
+              <span>{prediction ? `${prediction.minCars}–${prediction.maxCars} cars predicted` : cars === 0 ? 'No cars ahead' : `${cars} ${cars === 1 ? 'car' : 'cars'} ahead`}</span>
             </div>
           )}
         </div>
@@ -117,7 +118,7 @@ export function WashCard({
       <div className="wash-card-v2-footer">
         <div className={'wash-card-v2-freshness ' + freshness}>
           <i aria-hidden="true" />
-          <span>{hasQueueData ? `${source} · ${minutesAgo(wash.estimate.lastUpdatedAt)}` : 'No recent queue report'}</span>
+          <span>{prediction ? 'WashRadar estimate · not live' : hasQueueData ? `${source} · ${minutesAgo(wash.estimate.lastUpdatedAt)}` : 'No recent queue report'}</span>
         </div>
         <div className="wash-card-v2-total">
           <span>{queueAndWashMinutes !== null ? <>Queue + wash · <strong>~{queueAndWashMinutes} min</strong></> : <>Queue + wash · <strong>unknown</strong></>}</span>
