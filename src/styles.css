@@ -498,3 +498,8 @@ html, body, #root { max-inline-size: 100%; overflow-x: clip; }
   .decision-strip > a { min-width: 0; }
   .site-footer { min-width: 0; }
 }
+
+/* One search form remains accessible throughout the results list. */
+.sticky-search-region { position: sticky; top: 76px; z-index: 35; background: #f7faf8; padding: 6px 0; min-width: 0; }
+.sticky-search-region .search-row { margin-bottom: 0; }
+@media (max-width: 700px) { .sticky-search-region { top: 66px; } }

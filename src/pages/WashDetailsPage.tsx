@@ -88,7 +88,7 @@ export function WashDetailsPage() {
   const priceAge = latestPriceVerification === null ? null : Math.floor((Date.now() - latestPriceVerification) / 86_400_000);
   const status = statusPresentation(wash.estimate.operatingStatus);
   const prediction = wash.estimate.prediction;
-  const queueStateLabel = prediction ? 'PREDICTED' : queueKnown ? wash.estimate.dataState : 'LIMITED DATA';
+  const queueStateLabel = prediction ? 'ESTIMATED DEMAND' : queueKnown ? wash.estimate.dataState : 'LIMITED DATA';
   const distanceKnown = Boolean(contextWash || locationReady);
   const distanceLabel = distanceKnown ? `${wash.distanceKm.toFixed(1)} km` : 'Set location';
   const directions = () => {
@@ -129,8 +129,8 @@ export function WashDetailsPage() {
             </div>
             <div className="detail-wait">
               <div><small>CURRENT WAIT</small><strong>{queueMinutes === null ? '—' : (wash.estimate.dataState === 'ESTIMATED' ? '~' : '') + queueMinutes}{queueMinutes !== null && <span> min</span>}</strong><span>{queueMinutes === null ? 'Queue unknown' : prediction ? `${prediction.minCars}–${prediction.maxCars} cars predicted` : 'Current queue estimate'}</span></div>
-              <div><small>DATA STATUS</small><b className={'data-state ' + (queueKnown ? wash.estimate.dataState.toLowerCase().replace(' ', '-') : 'estimated')}>{queueStateLabel}</b><span>{prediction ? 'WashRadar estimate · not live' : queueKnown ? minutesAgo(wash.estimate.lastUpdatedAt) : 'No queue evidence yet'}</span></div>
-              <div><small>CONFIDENCE</small><b><ShieldCheck size={17} /> {queueKnown ? wash.estimate.confidenceLabel : 'Queue unknown'}</b><span>{wash.estimate.recentSignalCount ? wash.estimate.recentSignalCount + ' recent signals' : wash.historicalSampleCount > 0 ? wash.historicalSampleCount + ' historical samples' : prediction ? 'Unvalidated time-of-day model' : 'Waiting for driver or historical data'}</span></div>
+              <div><small>DATA STATUS</small><b className={'data-state ' + (queueKnown ? wash.estimate.dataState.toLowerCase().replace(' ', '-') : 'estimated')}>{queueStateLabel}</b><span>{prediction ? 'Estimated demand' : queueKnown ? minutesAgo(wash.estimate.lastUpdatedAt) : 'No queue evidence yet'}</span></div>
+              <div><small>CONFIDENCE</small><b><ShieldCheck size={17} /> {queueKnown ? wash.estimate.confidenceLabel : 'Queue unknown'}</b><span>{wash.estimate.recentSignalCount ? wash.estimate.recentSignalCount + ' recent signals' : wash.historicalSampleCount > 0 ? wash.historicalSampleCount + ' historical samples' : prediction ? 'Demand model · actual conditions may vary' : 'Waiting for driver or historical data'}</span></div>
             </div>
             <div className="large-equation">
               <span><MapPin size={20} /><small>DISTANCE</small><b>{distanceLabel}</b></span><i>·</i>
