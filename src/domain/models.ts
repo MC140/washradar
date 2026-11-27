@@ -38,6 +38,15 @@ export interface BusinessHours {
   closed: boolean;
 }
 
+export interface PredictionWeather {
+  lat: number;
+  lng: number;
+  observedAt: string;
+  temperatureC: number;
+  precipitation1hMm: number | null;
+  precipitation24hMm: number | null;
+}
+
 export interface CarWash {
   id: string;
   name: string;
@@ -57,6 +66,7 @@ export interface CarWash {
   minutesPerCar: number;
   historicalWaitMinutes: number;
   historicalSampleCount: number;
+  predictionWeather?: PredictionWeather;
   hours: BusinessHours[];
   amenities: string[];
   dataEnvironment: 'production' | 'demo';
@@ -88,7 +98,7 @@ export interface QueueEstimate {
   estimatedCars: number | null;
   recentSignalCount: number;
   /** Uncalibrated demand heuristic, never a driver report. */
-  prediction?: {minCars: number; maxCars: number};
+  prediction?: {minCars: number; maxCars: number; weatherAdjusted?: boolean};
 }
 
 export interface WeatherSignal {

@@ -137,7 +137,7 @@ export function WashDetailsPage() {
               <span><Clock3 size={20} /><small>WAIT</small><b>{queueMinutes === null ? '—' : (prediction ? '~' : '') + queueMinutes + ' min'}</b></span><i>·</i>
               <span><Droplets size={20} /><small>WASH EST.</small><b>~{wash.estimatedWashMinutes} min</b></span>
             </div>
-            {prediction && <p className="disclaimer"><TriangleAlert size={14} /> This is a rough demand prediction, not a measured queue. Actual wait and operating hours may differ. At the wash? Update the queue to help other drivers.</p>}
+            {prediction && <p className="disclaimer"><TriangleAlert size={14} /> This is a rough demand prediction, not a measured queue. {prediction.weatherAdjusted ? 'Adjusted using regional weather observations from Environment and Climate Change Canada. ' : ''}Actual wait and operating hours may differ. At the wash? Update the queue to help other drivers.</p>}
             {!distanceKnown && <p className="disclaimer"><MapPin size={14} /> Set your location on Explore to calculate distance. Directions still opens the wash in your navigation app.</p>}
             <p className="disclaimer"><TriangleAlert size={14} /> Travel time and traffic are intentionally left to your navigation app. WashRadar focuses on distance and queue conditions.</p>
             <div className="detail-actions">

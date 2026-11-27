@@ -2,6 +2,7 @@ import {appConfig} from '../config/env';
 import {DEMO_WASHES, createDemoSignals} from '../data/demo';
 import {rankWashes} from '../domain/engine';
 import type {BusinessHours, CarWash, Point, QueueSignal, RankedWash, WashPackage, WashType} from '../domain/models';
+import {loadPredictionWeather, withPredictionWeather} from './predictionWeather';
 import {supabaseClient} from './supabaseClient';
 
 type DirectoryRow = {
@@ -67,7 +68,7 @@ export async function loadWashDetail(washId: string, origin?: Point): Promise<{w
   if (!data) return {wash: null, signals: []};
 
   const raw = mapWash(data as DirectoryRow);
-  const response = await supabaseClient.rpc('queue_signal_feed', {p_wash_ids: [washId]});
+  const [response] = await Promise.all([supabaseClient.rpc('queue_signal_feed', {p_wash_ids: [washId]}), loadPredictionWeather()]);
   const signals = response.error ? [] : (response.data ?? []) as QueueSignal[];
-  return {wash: rankWashes([raw], signals, origin ?? raw.position)[0] ?? null, signals};
+  return {wash: rankWashes([withPredictionWeather(raw)], signals, origin ?? raw.position)[0] ?? null, signals};
 }

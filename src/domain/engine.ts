@@ -55,6 +55,22 @@ function weightedMedian(items: {wait: number; weight: number}[]): number {
 // intentionally conservative assumptions, not observed traffic or popularity.
 const gtaClock = new Intl.DateTimeFormat('en-CA', {timeZone: 'America/Toronto', weekday: 'short', hour: 'numeric', hourCycle: 'h23'});
 
+// Precipitation and cold-weather residue are demand proxies, not observed queues.
+export function weatherDemandFactor(wash: CarWash, now: Date): number {
+  const weather = wash.predictionWeather;
+  if (!weather) return 1;
+  const age = now.getTime() - Date.parse(weather.observedAt);
+  if (!Number.isFinite(age) || age < -300_000 || age > 2 * 60 * 60_000) return 1;
+  if (weather.temperatureC <= -12) return 0.45;
+  if (weather.precipitation1hMm !== null && weather.precipitation1hMm >= 1) return 0.45;
+  if (weather.precipitation1hMm !== null && weather.precipitation1hMm >= 0.2) return 0.7;
+  if (weather.precipitation1hMm !== null && weather.precipitation1hMm < 0.2 &&
+      weather.precipitation24hMm !== null && weather.precipitation24hMm >= 2) {
+    return weather.temperatureC <= 5 && weather.temperatureC >= -5 ? 1.5 : 1.15;
+  }
+  return 1;
+}
+
 function demandPrediction(wash: CarWash, now: Date): QueueEstimate['prediction'] {
   const parts = gtaClock.formatToParts(now);
   const hour = Number(parts.find((part) => part.type === 'hour')?.value);
@@ -66,9 +82,11 @@ function demandPrediction(wash: CarWash, now: Date): QueueEstimate['prediction']
   let hash = 2166136261;
   for (const char of wash.id) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
   const variation = (hash >>> 0) % 5;
-  const center = peak ? 2 + variation : daytime ? variation : Math.floor(variation / 3);
-  const maxCars = Math.min(8, center + 1);
-  return {minCars: Math.max(0, center - 1), maxCars};
+  const base = peak ? 2 + variation : daytime ? variation : Math.floor(variation / 3);
+  const factor = weatherDemandFactor(wash, now);
+  const center = Math.min(10, Math.max(0, Math.round(base * factor)));
+  const maxCars = Math.min(12, center + 1);
+  return {minCars: Math.max(0, center - 1), maxCars, ...(factor !== 1 ? {weatherAdjusted: true} : {})};
 }
 
 export function estimateQueue(wash: CarWash, signals: QueueSignal[], now = new Date()): QueueEstimate {
@@ -160,7 +178,7 @@ export function estimateQueue(wash: CarWash, signals: QueueSignal[], now = new D
     lastUpdatedAt: newest?.toISOString() ?? null,
     operatingStatus,
     prediction,
-    estimatedCars: predictedCars ?? (weightedInputs.length ? Math.round(waitMinutes / Math.max(wash.minutesPerCar, 0.5)) : null),
+    estimatedCars: predictedCars ?? (totalWeight > 0 ? Math.round(waitMinutes / Math.max(wash.minutesPerCar, 0.5)) : null),
     recentSignalCount: weightedInputs.length,
   };
 }

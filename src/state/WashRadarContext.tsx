@@ -18,6 +18,7 @@ import {analytics, logger} from '../services/analytics';
 import {repository} from '../services';
 import {requestLocation} from '../services/location';
 import type {ContributionMetrics} from '../services/repository';
+import {loadPredictionWeather, withPredictionWeather} from '../services/predictionWeather';
 import {loadQueueSignals} from '../services/scaleRefresh';
 import {
   browsingPointForGps,
@@ -158,7 +159,7 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
       ]);
       if (version !== refreshVersion.current) return;
 
-      setWashes(rankWashes(rawWashes, freshSignals, origin, {preferredTypes: filters.types}));
+      setWashes(rankWashes(rawWashes.map(withPredictionWeather), freshSignals, origin, {preferredTypes: filters.types}));
       setSignals(freshSignals);
       setFavourites(favouriteIds);
       setAlerts(savedAlerts);
@@ -180,12 +181,26 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
       const freshSignals = await loadQueueSignals(activeWashIdsKey.split(','));
       setSignals(freshSignals);
       setWashes((current) => current.length
-        ? rankWashes(current, freshSignals, origin, {preferredTypes: filters.types})
+        ? rankWashes(current.map(withPredictionWeather), freshSignals, origin, {preferredTypes: filters.types})
         : current);
     } catch (caught) {
       logger.error(caught, {area: 'queue-refresh'});
     }
   }, [activeWashIdsKey, filters.types, locationReady, origin]);
+
+  useEffect(() => {
+    if (!locationReady || repository.mode !== 'supabase') return;
+    const pollWeather = () => {
+      if (navigator.onLine && document.visibilityState === 'visible') void loadPredictionWeather();
+    };
+    pollWeather();
+    const timer = window.setInterval(pollWeather, 60_000);
+    document.addEventListener('visibilitychange', pollWeather);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', pollWeather);
+    };
+  }, [locationReady]);
 
   useEffect(() => {
     analytics.track('app_opened', {mode: repository.mode});
@@ -238,7 +253,7 @@ export function WashRadarProvider({children}: {children: ReactNode}) {
     if (!locationReady) return;
     const timer = window.setInterval(() => {
       setWashes((current) => current.length
-        ? rankWashes(current, signals, origin, {preferredTypes: filters.types}, new Date())
+        ? rankWashes(current.map(withPredictionWeather), signals, origin, {preferredTypes: filters.types}, new Date())
         : current);
     }, 60_000);
     return () => window.clearInterval(timer);
