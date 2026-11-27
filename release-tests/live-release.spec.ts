@@ -40,6 +40,14 @@ test('production shell, PWA assets and responsive layout are healthy', async ({p
   await expect(page.getByRole('link', {name: 'WashRadar home'})).toBeVisible();
   const dimensions = await page.evaluate(() => ({scrollWidth: document.documentElement.scrollWidth, innerWidth: window.innerWidth}));
   expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.innerWidth + 2);
+  if (dimensions.innerWidth <= 700) {
+    for (const selector of ['.site-header', '.app-main', '.search-row', '.filter-chips', '.site-footer', '.bottom-nav']) {
+      const bounds = await page.locator(selector).boundingBox();
+      expect(bounds, selector).not.toBeNull();
+      expect(bounds!.x, selector).toBeGreaterThanOrEqual(-2);
+      expect(bounds!.x + bounds!.width, selector).toBeLessThanOrEqual(dimensions.innerWidth + 2);
+    }
+  }
   for (const path of ['/manifest.webmanifest', '/sw.js', '/offline.html', '/favicon.svg']) {
     const asset = await request.get(path);
     expect(asset.ok(), `${path} should return 2xx`).toBeTruthy();

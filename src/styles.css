@@ -476,3 +476,25 @@ h1, h2, h3, .brand { font-family: ui-rounded, 'SF Pro Rounded', ui-sans-serif, s
 @media (max-width: 700px) {
   .site-footer { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Constrain the document, not the intentional chip/map scroll regions.
+   clip does not create a scrolling ancestor for the sticky header. */
+html, body, #root { max-inline-size: 100%; overflow-x: clip; }
+.app-main { width: 100%; min-width: 0; }
+.search-row { grid-template-columns: minmax(0, 1fr) auto; }
+.search-box, .search-box input { min-width: 0; }
+.search-box > svg { flex-shrink: 0; }
+.filter-chips { max-width: 100%; min-width: 0; }
+.open-toggle { position: relative; flex: 0 0 auto; }
+@media (max-width: 700px) {
+  body { min-width: 0; }
+  .site-header { min-width: 0; }
+  .site-header .brand { flex: 0 0 auto; }
+  .site-header .location-button { min-width: 0; }
+  .site-header .location-button svg { flex-shrink: 0; }
+  .cards-grid, .decision-strip { min-width: 0; }
+  .cards-grid { grid-template-columns: minmax(0, 1fr); }
+  .decision-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .decision-strip > a { min-width: 0; }
+  .site-footer { min-width: 0; }
+}
