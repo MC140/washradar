@@ -51,6 +51,26 @@ function weightedMedian(items: {wait: number; weight: number}[]): number {
   return sorted[sorted.length - 1].wait;
 }
 
+// GTA local time, independent of the visitor's device timezone. The bands are
+// intentionally conservative assumptions, not observed traffic or popularity.
+const gtaClock = new Intl.DateTimeFormat('en-CA', {timeZone: 'America/Toronto', weekday: 'short', hour: 'numeric', hourCycle: 'h23'});
+
+function demandPrediction(wash: CarWash, now: Date): QueueEstimate['prediction'] {
+  const parts = gtaClock.formatToParts(now);
+  const hour = Number(parts.find((part) => part.type === 'hour')?.value);
+  const weekend = ['Sat', 'Sun'].includes(parts.find((part) => part.type === 'weekday')?.value ?? '');
+  if (wash.status === 'unknown' && (hour < 7 || hour >= 22)) return undefined;
+  const peak = weekend ? hour >= 10 && hour < 17 : hour >= 16 && hour < 19;
+  const daytime = hour >= 9 && hour < 20;
+  // Stable variation by site ID; never invent location-specific traffic history.
+  let hash = 2166136261;
+  for (const char of wash.id) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
+  const variation = (hash >>> 0) % 5;
+  const center = peak ? 2 + variation : daytime ? variation : Math.floor(variation / 3);
+  const maxCars = Math.min(8, center + 1);
+  return {minCars: Math.max(0, center - 1), maxCars};
+}
+
 export function estimateQueue(wash: CarWash, signals: QueueSignal[], now = new Date()): QueueEstimate {
   const uniqueActors = new Map<string, QueueSignal>();
   signals
@@ -127,20 +147,30 @@ export function estimateQueue(wash: CarWash, signals: QueueSignal[], now = new D
             ? 'Medium'
             : 'Low';
 
+  const prediction = totalWeight === 0 && wash.dataEnvironment === 'production' &&
+    operatingStatus !== 'closed' && operatingStatus !== 'unavailable' && closureReports.length === 0
+    ? demandPrediction(wash, now) : undefined;
+  const predictedCars = prediction ? (prediction.minCars + prediction.maxCars) / 2 : null;
+
   return {
-    waitMinutes,
-    confidenceScore,
-    confidenceLabel,
+    waitMinutes: predictedCars === null ? waitMinutes : Math.min(90, Math.round(predictedCars * Math.max(wash.minutesPerCar, 0.5))),
+    confidenceScore: prediction ? 8 : confidenceScore,
+    confidenceLabel: prediction ? 'Low' : confidenceLabel,
     dataState,
     lastUpdatedAt: newest?.toISOString() ?? null,
     operatingStatus,
-    estimatedCars: weightedInputs.length ? Math.round(waitMinutes / Math.max(wash.minutesPerCar, 0.5)) : null,
+    prediction,
+    estimatedCars: predictedCars ?? (weightedInputs.length ? Math.round(waitMinutes / Math.max(wash.minutesPerCar, 0.5)) : null),
     recentSignalCount: weightedInputs.length,
   };
 }
 
 export function hasQueueEvidence(wash: Pick<CarWash, 'historicalSampleCount'>, estimate: Pick<QueueEstimate, 'recentSignalCount'>): boolean {
   return estimate.recentSignalCount > 0 || wash.historicalSampleCount > 0;
+}
+
+export function hasQueueEstimate(wash: Pick<CarWash, 'historicalSampleCount'>, estimate: QueueEstimate): boolean {
+  return estimate.operatingStatus !== 'closed' && estimate.operatingStatus !== 'unavailable' && (hasQueueEvidence(wash, estimate) || Boolean(estimate.prediction));
 }
 
 export function totalTime(driveMinutes: number, queueMinutes: number, washMinutes: number): number {
@@ -161,7 +191,7 @@ export function rankWash(
   const rawDistance = distanceKm(origin, wash.position);
   const driveMinutes = options.routeMinutes ?? Math.max(2, Math.round(rawDistance / 0.58 + 2));
   const queueKnown = hasQueueEvidence(wash, estimate);
-  const queueForRanking = queueKnown ? estimate.waitMinutes : 0;
+  const queueForRanking = hasQueueEstimate(wash, estimate) ? estimate.waitMinutes : 0;
   const tripTotal = totalTime(driveMinutes, queueForRanking, wash.estimatedWashMinutes);
   const price = startingPrice(wash);
   const preferred = options.preferredTypes?.some((type) => wash.types.includes(type)) ?? false;
@@ -229,7 +259,7 @@ export function rankWashes(
     if (wash.estimate.waitMinutes === 0 && wash.estimate.recentSignalCount > 0) reasons.push('No reported queue');
     if (wash.rating !== null && wash.rating >= 4.5) reasons.push('Highly rated');
     if (wash.id === cheapest?.id) reasons.push('Lowest known starting price');
-    if (wash.id === best.id && !hasQueueEvidence(wash, wash.estimate)) reasons.push('Best available estimate · queue unknown');
+    if (wash.id === best.id && !hasQueueEvidence(wash, wash.estimate)) reasons.push('Best available estimate · no recent queue evidence');
     if (wash.id === best.id && wash.estimate.operatingStatus === 'unknown') reasons.push('Hours not yet verified');
     if (wash.id === best.id && hasQueueEvidence(wash, wash.estimate) && nearest && nearest.id !== wash.id && wash.totalMinutes < nearest.totalMinutes) {
       reasons.push(`${nearest.totalMinutes - wash.totalMinutes} min faster than the closest option`);
