@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {estimateQueue, freshnessWeight, hasQueueEstimate, hasQueueEvidence, queueBucketToWait, rankWashes, totalTime} from '../src/domain/engine.ts';
+import {estimateQueue, freshnessWeight, hasQueueEstimate, hasQueueEvidence, queueBucketToWait, rankWashes, weatherDemandFactor, totalTime} from '../src/domain/engine.ts';
 import {contributorLevel, initials} from '../src/domain/community.ts';
 import {DEMO_ORIGIN, DEMO_WASHES} from '../src/data/demo.ts';
 
@@ -128,4 +128,25 @@ test('production cold-start prediction is stable, labeled and not report evidenc
   assert.equal(estimateQueue({...wash, status: 'unavailable'}, [], now).prediction, undefined);
   assert.equal(estimateQueue({...wash, status: 'unknown'}, [], new Date('2026-11-28T07:00:00Z')).prediction, undefined);
   assert.equal(estimateQueue({...wash, historicalSampleCount: 1}, [], now).prediction, undefined);
+});
+
+test('weather factors reduce active precipitation demand, increase post-precipitation demand, and ignore stale weather', () => {
+  const now = new Date('2026-11-28T17:00:00Z');
+  const wash = {...DEMO_WASHES[0], dataEnvironment: 'production', status: 'open', historicalSampleCount: 0, historicalWaitMinutes: 0};
+  const weather = {lat: 43.7, lng: -79.4, observedAt: now.toISOString(), temperatureC: 2, precipitation1hMm: 0, precipitation24hMm: 5};
+  const wet = {...wash, predictionWeather: {...weather, precipitation1hMm: 4}};
+  const recovery = {...wash, predictionWeather: weather};
+  assert.equal(weatherDemandFactor(wet, now), 0.45);
+  assert.equal(weatherDemandFactor(recovery, now), 1.5);
+  assert.ok(estimateQueue(wet, [], now).waitMinutes < estimateQueue(wash, [], now).waitMinutes);
+  assert.ok(estimateQueue(recovery, [], now).waitMinutes > estimateQueue(wash, [], now).waitMinutes);
+  assert.equal(estimateQueue(recovery, [], now).prediction.weatherAdjusted, true);
+  assert.equal(weatherDemandFactor(recovery, new Date('2026-11-28T21:00:00Z')), 1);
+  assert.equal(weatherDemandFactor({...wash, predictionWeather: {...weather, precipitation1hMm: null}}, now), 1);
+  const report = {...signal(wash.id, 'driver', 0, 0), createdAt: now.toISOString()};
+  assert.equal(estimateQueue(recovery, [report], now).prediction, undefined);
+  assert.equal(estimateQueue(recovery, [report], now).waitMinutes, 0);
+  const historical = estimateQueue({...recovery, historicalSampleCount: 3, historicalWaitMinutes: 15}, [], now);
+  assert.equal(historical.prediction, undefined);
+  assert.equal(historical.waitMinutes, 15);
 });
